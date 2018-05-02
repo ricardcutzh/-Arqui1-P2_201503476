@@ -165,6 +165,7 @@ section .data
 	PUSH CX
 	PUSH SI
 	PUSH DX
+	PUSH DI
 	;-------------------------
 	MOV BX, %1      			; MUEVO LA POSICION BX A FUNCION 
 	XOR AX, AX 					; LIMPIO AX
@@ -175,6 +176,7 @@ section .data
 	MOV byte[tipo_term], 03h
 	CALL EVL_TERM
 	;-------------------------
+	POP DI
 	POP DX
 	POP SI
 	POP CX
@@ -189,7 +191,14 @@ section .data
 	PUSH DX
 	;-------
 	MOV BX, %1 					; PUNTERO DE LA CADENA DONDE VOY A EXTRAER LA VARIABLE
-	
+	XOR AX, AX 					; LIMPIO EL REGISTRO
+	MOV AL, 09H 				; MUEVO EL 9 PARA PODER MOVERME
+	MOV CL, %2 					; MUEVO EL INDICE INDICADO A CL
+	MUL CL 						; MULTIPLICO AX * CL
+	ADD BX, AX 					; SUMO BX + AX
+	INC BX 						; ME MUEVO DONDE EMPIEZA EL NUMERO
+	MOV SI, vari 				; MUEVO EL PUNTERO SI PARA PODER APUNTAR A LA POSICION DE MEMORIA DE VARI
+	CALL OBT_VAR 				; SALTO AL LOOP PARA OBTENER LA VARIABLE
 	;-------
 	POP DX
 	POP SI
@@ -203,6 +212,7 @@ section .data
 	PUSH CX
 	PUSH SI
 	PUSH DX
+	PUSH DI
 	;-------
 	MOV BX, %1 					; MUEVO EL PUNTERO A LA POSICION DE BX
 	XOR AX, AX 					; LIMPIO EL REGISTRO AX
@@ -214,6 +224,7 @@ section .data
 	MOV SI, coef 				; MUEVO EL PUNTERO DEL COEF PARA OBTENER EL NUMERO
 	CALL OBT_NUM
 	;-------
+	POP DI
 	POP DX
 	POP SI
 	POP CX
@@ -279,7 +290,7 @@ section .data
 	MOV CL, 0AH 				; MUEVO A CL EL 10
 	MUL CL 						; AX * 10 
 	MOV %2, AL 					; GUARDO EL NUMERO EN LA MEMORIA LA VARIABLE
-	;INC BX 						; INCREMENTO BX
+	INC BX 						; INCREMENTO BX
 	MOV AL, byte[BX]			; OBTENGO EL SIGUIENTE NUMERO
 	SUB AL, 30H 				; LE QUITO 30 PARA PODER SACAR EL VALOR
 	ADD %2, AL 					; LE SUMO EL SIGUIENTE DIGITOS
@@ -363,8 +374,10 @@ aceptado 			db "************** CADENA ACEPTADA ***************************",10,1
 
 entrada times 255   db "$"
 
-mder1 				db "DERIVADA 1$"
-mder0 				db "DERIVADA 0$"
+
+separador           db "*********************************************************",'$'
+resDer1 			db " FUNCION INGRESADA >> $"
+resDer2 			db " DERIVADA DE FUNCION >> $"
 ;----------------------------------------------------------------------------------------------------
 funcion 			db "$$$$$$$$$" 													; ALMACENA
 					db "$$$$$$$$$" 													; TERMINOS DE 
@@ -376,10 +389,11 @@ derivada 			db "$$$$$$$$$"													; ALMACENA
 					db "$$$$$$$$$"													; DE LA FUNCION
 					db "$$$$$$$$$"													; DERIVADA
 
-tipo_term 			db 0
+tipo_term 			db 0h
 
 coef 	times 5     db "$" 															; ALMACENA EL COEFICIENTE DEL TERMINO A PROCESAR
 expo 	times 3     db "$" 															; ALMACENA EL EXPONENETE DEL TERMIO A PROCESAR
+vari    times 2 	db "$"
 
 coef_num 			db 0h
 
@@ -390,6 +404,8 @@ salida  times 7     db '$'
 resul 				dw 0h
 
 charArr 			db '$'
+
+error 				db 00h
 ;-----------------------------------------------------------------------------------------------------
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE TEXT																			 *
@@ -432,16 +448,20 @@ section .text
 ;*															SECCION DE DERIVAR   																	 *
 ;*****************************************************************************************************************************************************
 	OP_DERIVAR:
+		MOV byte[error], 00h
 		CL_STRING entrada 										; LIMPIA LA ENTRADA
 		CALL CLS 												; LIMPIA LA PANTALLA
 		PRINTSTRING der_menu 									; IMPRIME EL MENU
 		IN_STRING entrada 										; OBTENGO LA ENTRADA DEL TECLADO
 		ANALIZAR entrada 										; ANALIZA LA ENTRADA PARA PODER  TOMAR LOS TERMINOS DE LA FUNCION
+		CMP byte[error], 01h
+		JE MENU_PRINCIPAL
 		;*-------------------------------------------------------
 		; LLAMADA ALA DERIVADA
 		CALL DERIVA_FUNCION
 		;*------------------------------------------------------- 
 		CALL LIMPIAR_FUN
+		CALL LIMPIAR_DERIVADA
 		CALL SYSPAUSE 											; PAUSA
 		JMP MENU_PRINCIPAL
 
@@ -468,6 +488,7 @@ section .text
 			JE LLAMA_DE1
 			CMP BYTE[tipo_term], 00h
 			JE LLAMA_DE0
+			JMP DER_VUELVE
 			LLAMA_DE0:
 				CALL DERIVA0 									; LLAMA A LA DERIVADA DE TIPO 1
 				XOR AX, AX 										; LIMPIO EL REGISTRO
@@ -479,6 +500,9 @@ section .text
 			LLAMA_DE2:
 				CALL DERIVA2									; LLAMADA ALA ENCARGADA DERIVAR EL QUE TIENE EXPONENTE
 				XOR AX, AX 										; LIMPIO AX
+				;IMPRIMECHAR 10
+				;CALL IMPRIME_DERIVADA
+				;IMPRIMECHAR 10
 				JMP DER_VUELVE
 			DER_VUELVE:
 				;----------
@@ -487,10 +511,18 @@ section .text
 				ADD BX, 09H										; AUMENTAR UNA POSICION EN BX EN EL ARREGLO DE FUNCION
 				ADD SI, 09H 									; AUMENTAR UNA POSICION EN SI EN EL ARREGLO DE DERIVADA
 				INC CX											; INCREMENTO EL CONTADOR
-				MOV byte[tipo_term], 003h
+				MOV byte[tipo_term], 000h
 				JMP LOOP_DER
 		;-------------
 		FIN:
+		PRINTSTRING separador
+		IMPRIMECHAR 10 
+		PRINTSTRING resDer1
+		CALL IMPRIME_FUNCION
+		IMPRIMECHAR 10
+		PRINTSTRING resDer2
+		CALL IMPRIME_DERIVADA
+		IMPRIMECHAR 10
 		POP SI
 		POP DI
 		POP DX
@@ -507,8 +539,12 @@ section .text
 		PUSH DI
 		PUSH SI
 		;------
-		PRINTSTRING mder0
-		IMPRIMECHAR 10
+		;MOV byte[SI], '+' 										; MUEVO EL SIGNO MAS
+		;INC SI
+		;MOV byte[SI], '0'										; LE AGREGO EL 0 YA QUE ES LA DERIVADA DE UNA CONSTANTE
+		;IMPRIMECHAR 10
+		;PRINTSTRING mder0
+		;IMPRIMECHAR 10
 		;------
 		POP SI
 		POP DI
@@ -526,8 +562,23 @@ section .text
 		PUSH DI
 		PUSH SI
 		;------
-		PRINTSTRING mder1
-		IMPRIMECHAR 10
+		CL_STRING coef
+		PUSH BX
+		GET_NUM BX, 0H
+		POP BX
+		MOV DL, byte[BX]
+		MOV byte[SI], DL 										; PONGO EL SIGNO DE EL TERMINO
+		INC SI 													; SI ++
+		MOV DI, coef
+		L_SAL1:
+			CMP byte[DI], '$'								; ES EL SIGNO DE DDOLAR?
+			JE L_SAL_FIN1
+			MOV DL, byte[DI] 								; MUEVO EL CARACTER DE SALIDA
+			MOV byte[SI], DL 								; PASO EL CARACTER A SI
+			INC SI
+			INC DI 											; INCREMENTO SI Y DL
+			JMP L_SAL1
+		L_SAL_FIN1:
 		;------
 		POP SI
 		POP DI
@@ -546,11 +597,16 @@ section .text
 		PUSH SI
 		;------
 		MOV byte[coef_num], 0h
+		MOV word[resul], 00H
+		MOV byte[tam], 00h
+		CL_STRING charArr
 		CL_STRING coef 											; LIMPIO EL COEFICIENTE
 		CL_STRING expo 											; LIMPIO EL EXPONENTE
 		CL_STRING salida
-		GET_NUM BX, CL 											; OBTENGO EL NUMERO
-		GET_EXP BX, CL 											; OBTENGO EL EXPONENTE
+		CL_STRING vari
+		GET_NUM BX, 0h 											; OBTENGO EL NUMERO
+		GET_EXP BX, 0h 											; OBTENGO EL EXPONENTE
+		GET_VAR BX, 0h
 		COUNT coef, [tam] 										; CUENTO EL TAMANO DEL COEFICIENTE
 		CMP byte[tam], 01h 										; SI ES 1?
 		JE P_COEF1 												; SI SI.. VAS A PROCESAR EL COEF 1
@@ -574,9 +630,45 @@ section .text
 			MOV word[resul], AX 								; GUARDO EL RESULTADO
 			NUM_TO_CHAR resul, charArr 							; CONVIERTO EL NUMERO A ARREGLO
 			NUM_SALIDA charArr, salida 							; CONVIERTO EL ARREGLO EN STRING DE SALIDA
-			PRINTSTRING salida
-			IMPRIMECHAR 10
-		;------
+			SUB DL, 001H 										; LE RESTO 1 AL EXPONENTE
+			ADD DL, 30H 										; LE SUMO 30 PARA CONVERTIRLO A SU EQUIVALENTE EN CARACTER
+			MOV byte[expo], DL 									; LO GUARDO EN LA VARIABLE EXPONENTE
+			;---------------------------------------------------
+			; SACANDO LA DERIVADA DEL TERMINO
+			;---------------------------------------------------
+			PUSH DX
+			PUSH BX
+			PUSH SI
+			PUSH DI
+			XOR DL, DL
+			MOV DL, byte[BX] 									; OBTENGO EL SIGNO
+			MOV byte[SI], DL 									; PONGO EL SIGNO EN DERIVADA
+			INC SI 
+			;--------------
+			; ESCIBE SALIDA
+			;--------------
+			MOV DI, salida
+			L_SAL:
+				CMP byte[DI], '$'								; ES EL SIGNO DE DDOLAR?
+				JE L_SAL_FIN
+				MOV DL, byte[DI] 								; MUEVO EL CARACTER DE SALIDA
+				MOV byte[SI], DL 								; PASO EL CARACTER A SI
+				INC SI
+				INC DI 											; INCREMENTO SI Y DL
+				JMP L_SAL
+			L_SAL_FIN:
+			MOV DL, byte[vari] 									; MUEVO LA VARIABLE A DL
+			MOV byte[SI], DL 									; PONGO LA VARIABLE A SI
+			INC SI 												; MUEVO SI
+			MOV DL, '^'											; MUEVO EL SOMBRERITO A DL
+			MOV byte[SI], DL 									; MUEVO EL SOMBRERO A DL
+			INC SI 												; MUEVO SI
+			MOV DL, byte[expo]									; MUEVO EL NUEVO EXPONENTE
+			MOV byte[SI], DL 									; LO PONGO EN SI
+			POP DI
+			POP SI
+			POP BX
+			POP DX
 		POP SI
 		POP DI
 		POP DX
@@ -705,6 +797,7 @@ section .text
 		JMP STATE_0										
 
 	ERROR_A:
+		MOV byte[error], 01h
 		CALL CLS
 		IMPRIMECHAR 10
 		PRINTSTRING error_analisis
@@ -743,13 +836,25 @@ section .text
 		CL_STRING DI
 		RET
 
+	LIMPIAR_DERIVADA:
+		MOV DI, derivada
+		CL_STRING DI
+		ADD DI, 09H
+		CL_STRING DI
+		ADD DI, 09H
+		CL_STRING DI
+		ADD DI, 09H
+		CL_STRING DI
+		RET
+
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE INTEGRAR      																 *
 ;*****************************************************************************************************************************************************	
 	OP_INTEGRAR:
-		CALL CLS
-		IMPRIMECHAR 'I'
-		IMPRIMECHAR 10
+		MOV byte[error], 00h
+		CL_STRING entrada 										; LIMPIO LA ENTRADA
+		CALL CLS 												; LIMPIO LA PANTALLA
+		
 		CALL SYSPAUSE
 		JMP MENU_PRINCIPAL
 ;*****************************************************************************************************************************************************
@@ -889,6 +994,17 @@ section .text
 			MOV byte[SI], AL 				; GUARDO EL EXPONENTE EN AL
 			RET
 	
+	OBT_VAR:
+		CMP byte[BX], '0'
+		JL OBT_VAR_FIN
+		CMP byte[BX], '9'
+		JG OBT_VAR_FIN
+		INC BX
+		JMP OBT_VAR
+		OBT_VAR_FIN:
+			MOV AL, byte[BX]
+			MOV byte[vari], AL
+			RET
 	;--------------------------------------
 	; IMPRIME FUNCION - DERIVADA - INTEGRAL
 	;--------------------------------------
@@ -908,7 +1024,7 @@ section .text
 		PRINTSTRING SI
 		ADD SI, 09H
 		PRINTSTRING SI
-		IMPRIMECHAR 10
+		;IMPRIMECHAR 10
 		;------
 		POP SI
 		POP DI
@@ -934,7 +1050,7 @@ section .text
 		PRINTSTRING SI
 		ADD SI, 09H
 		PRINTSTRING SI
-		IMPRIMECHAR 10
+		;IMPRIMECHAR 10
 		;------
 		POP SI
 		POP DI
