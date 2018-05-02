@@ -3,6 +3,7 @@
 ;*****************************************************************************************************************************************************
 section .bss
 
+
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE DATA																			 *
 ;*****************************************************************************************************************************************************
@@ -11,14 +12,30 @@ section .data
 ; MACROS
 ;=======================================================
 %macro PRINTSTRING 1
+	PUSH AX
+	PUSH CX
+	PUSH BX
+
 	MOV DX, %1		; COLOCO EL MENSAJE A IMPRIMIR
 	MOV AH, 9 	 	; MUEVO 9 PARA LA IMPRIMIR EN PANTALLA
 	INT 21H			; LLAMADA AL A INTERRUPCION 21H
+
+	POP BX
+	POP CX
+	POP AX
 %endmacro
 %macro IMPRIMECHAR 1
+	PUSH AX
+	PUSH CX
+	PUSH BX
+
 	MOV AH, 02H		; DUNCION PARA IMPRIMIR UN CARACTER
 	MOV DL, %1 		; CARACTER DE SALIDA A IMPRIMIR
 	INT 21H 		; INTERRUPCION 21H
+
+	POP BX
+	POP CX
+	POP AX
 %endmacro
 %macro open_file 2 				; P1: NOMBRE DEL ARCHIVO, P2: HANDLE DONDE DEVOLVERE EL MANEJADOR DEL ARCHIVO
 	MOV AH, 3DH 				; FUNCION PARA ABRIR EL FICHERO
@@ -64,16 +81,36 @@ section .data
 	MOV %2, AX 					; HANDLE DEL ARCHIVO
 %endmacro
 %macro CL_STRING 1 				; P1: CADENA A LIMPIAR (BUFFER)
+	PUSH BX
+	PUSH AX
+	PUSH DX
+	PUSH CX
+
 	XOR DX,DX
 	MOV BX,BX
 	MOV BX, %1
 	CALL CLEAN_STRING
+
+	POP CX
+	POP DX
+	POP AX
+	POP BX
 %endmacro
 %macro IN_STRING 1 				; P1: BUFFER DONDE GUARDO LOS DATOS
+	PUSH BX
+	PUSH AX
+	PUSH DX
+	PUSH CX
+
 	XOR DX, DX
 	XOR BX, BX
 	MOV BX, %1
 	CALL INPUT_STRING
+
+	POP CX
+	POP DX
+	POP AX
+	POP BX
 %endmacro
 %macro EQUALS 2 				; P1: STRING 1, P2: STRING 2
 	MOV byte[igualdad], 1h 		; ASUMO QUE SON IGUALES
@@ -90,10 +127,18 @@ section .data
 	XOR SI, SI
 %endmacro
 %macro COUNT 2 					; P1: STRING A CONTAR, P2: LUGAR DONDE SE GUARDARA LA CUENTA
+	PUSH BX
+	PUSH CX
+	PUSH AX
+	PUSH DX
 	XOR BX, BX
 	MOV BX, %1
 	CALL COUNT_CHAR
 	MOV %2, CL
+	POP DX
+	POP AX
+	POP CX
+	POP BX
 %endmacro
 %macro ANALIZAR 1 				; P1: LA DIRECCION DE MEMORIA DE LA CADENA A ANALIZAR
 	PUSH BX
@@ -130,6 +175,22 @@ section .data
 	MOV byte[tipo_term], 03h
 	CALL EVL_TERM
 	;-------------------------
+	POP DX
+	POP SI
+	POP CX
+	POP AX
+	POP BX
+%endmacro
+%macro GET_VAR 2				; P1: CADENA, P2: INDICE
+	PUSH BX
+	PUSH AX
+	PUSH CX
+	PUSH SI
+	PUSH DX
+	;-------
+	MOV BX, %1 					; PUNTERO DE LA CADENA DONDE VOY A EXTRAER LA VARIABLE
+	
+	;-------
 	POP DX
 	POP SI
 	POP CX
@@ -190,8 +251,8 @@ section .data
 	PUSH DX
 	;------
 	MOV %2, 00h 		        ; LIMPIO LA VARIABLE
-	MOV BX, 1% 					; POSICIONO EL PUNTERO AL INICIO DE LA CADENA
-	INC BX 						; ME POSICIONO DONDE INICIA EL NUMERO
+	MOV BX, %1 					; POSICIONO EL PUNTERO AL INICIO DE LA CADENA
+	;INC BX 						; ME POSICIONO DONDE INICIA EL NUMERO
 	MOV AL, byte[BX]			; MUEVO EL CARACTER
 	SUB AL, 30H 				; LE QUITO 30 PARA TENER EL VALOR EN HEXA
 	MOV %2, AL 			        ; MUEVO EL RESULTADO A LA VARIABLE
@@ -211,20 +272,58 @@ section .data
 	;------
 	XOR AX, AX
 	MOV %2, 00h 		        ; LIMPIO LA VARIABLE
-	MOV BX, 1% 					; POSICIONO EL PUNTERO AL INICIO DE LA CADENA
-	INC BX 						; ME POSICIONO DONDE INICIA EL NUMERO
+	MOV BX, %1 					; POSICIONO EL PUNTERO AL INICIO DE LA CADENA
+	;INC BX 						; ME POSICIONO DONDE INICIA EL NUMERO
 	MOV AL, byte[BX]			; MUEVO EL CARACTER
 	SUB AL, 30H 				; LE QUITO 30 PARA TENER SU VALOR
 	MOV CL, 0AH 				; MUEVO A CL EL 10
 	MUL CL 						; AX * 10 
 	MOV %2, AL 					; GUARDO EL NUMERO EN LA MEMORIA LA VARIABLE
-	INC BX 						; INCREMENTO BX
+	;INC BX 						; INCREMENTO BX
 	MOV AL, byte[BX]			; OBTENGO EL SIGUIENTE NUMERO
 	SUB AL, 30H 				; LE QUITO 30 PARA PODER SACAR EL VALOR
 	ADD %2, AL 					; LE SUMO EL SIGUIENTE DIGITOS
 	;------
 	POP DX
 	POP SI
+	POP CX
+	POP AX
+	POP BX
+%endmacro
+%macro NUM_TO_CHAR 2 						; P1: VARIABLE TIPO WORD DONDE ALMACENARE LA RESPUESTA, P2: ARREGLO DONDE SE ALMACENARA EL ARREGLO
+	PUSH BX
+	PUSH AX
+	PUSH CX
+	PUSH DX
+	PUSH SI
+	;--------
+	XOR AX, AX 
+	XOR DX, DX
+	XOR CX, CX
+	XOR BX, BX
+	MOV AX, word[%1] 						; PONIENDO LA VARIABLE QUE ALMACENA EL NUMERO Y QUE VOY A COMVENRTIR
+	MOV BX, %2 								; LA DIRECCION DE LA CADENA
+	CALL DEC_TO_CHAR
+	;--------
+	POP SI
+	POP DX
+	POP CX
+	POP AX
+	POP BX
+%endmacro
+%macro NUM_SALIDA 2 						 ; P1: ARREGLO DONDE ESTA EL RESULTADO DE LA NUM_TO_CHAR, P2: DONDE QUIERO LA SALIDA
+	PUSH BX
+	PUSH AX
+	PUSH CX
+	PUSH DX
+	PUSH SI
+	;--------
+	MOV BX, %1
+	MOV SI, %2
+	CALL MOSTRARRESP1
+	;--------
+	POP SI
+	POP DX
 	POP CX
 	POP AX
 	POP BX
@@ -264,6 +363,8 @@ aceptado 			db "************** CADENA ACEPTADA ***************************",10,1
 
 entrada times 255   db "$"
 
+mder1 				db "DERIVADA 1$"
+mder0 				db "DERIVADA 0$"
 ;----------------------------------------------------------------------------------------------------
 funcion 			db "$$$$$$$$$" 													; ALMACENA
 					db "$$$$$$$$$" 													; TERMINOS DE 
@@ -281,6 +382,14 @@ coef 	times 5     db "$" 															; ALMACENA EL COEFICIENTE DEL TERMINO A 
 expo 	times 3     db "$" 															; ALMACENA EL EXPONENETE DEL TERMIO A PROCESAR
 
 coef_num 			db 0h
+
+tam 				db 0h
+
+salida  times 7     db '$'
+
+resul 				dw 0h
+
+charArr 			db '$'
 ;-----------------------------------------------------------------------------------------------------
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE TEXT																			 *
@@ -330,7 +439,7 @@ section .text
 		ANALIZAR entrada 										; ANALIZA LA ENTRADA PARA PODER  TOMAR LOS TERMINOS DE LA FUNCION
 		;*-------------------------------------------------------
 		; LLAMADA ALA DERIVADA
-
+		CALL DERIVA_FUNCION
 		;*------------------------------------------------------- 
 		CALL LIMPIAR_FUN
 		CALL SYSPAUSE 											; PAUSA
@@ -355,40 +464,31 @@ section .text
 			EVALUA_TERM funcion, CL 							; EVALULO LA POSICION CL DEL ARREGLO DE LA FUNCION
 			CMP byte[tipo_term], 02h 							; SI TIENE EXPONENTE
 			JE LLAMA_DE2
-
+			CMP byte[tipo_term], 01h
+			JE LLAMA_DE1
+			CMP BYTE[tipo_term], 00h
+			JE LLAMA_DE0
 			LLAMA_DE0:
 				CALL DERIVA0 									; LLAMA A LA DERIVADA DE TIPO 1
 				XOR AX, AX 										; LIMPIO EL REGISTRO
-				;----------
-				MOV AL, 09H 									; MUEVO 9 A AL
-				MUL CX 											; MMULTIPLICO AL * CL 
-				ADD BX, AX 										; SUMO A BX LO QUE SE MOVIO AL
-				ADD SI, AX 										; TAMBIEN SUMO AL A SI
-				;-----------
-				INC CX
-				JMP LOOP_DER
+				JMP DER_VUELVE
 			LLAMA_DE1:
 				CALL DERIVA1
 				XOR AX, AX 										; LIMPIO EL REGISTRO
-				;----------
-				MOV AL, 09H 									; MUEVO 9 A AL
-				MUL CX 											; MMULTIPLICO AL * CL 
-				ADD BX, AX 										; SUMO A BX LO QUE SE MOVIO AL
-				ADD SI, AX 										; TAMBIEN SUMO AL A SI
-				;-----------
-				INC CX
-				JMP LOOP_DER
+				JMP DER_VUELVE
 			LLAMA_DE2:
 				CALL DERIVA2									; LLAMADA ALA ENCARGADA DERIVAR EL QUE TIENE EXPONENTE
 				XOR AX, AX 										; LIMPIO AX
+				JMP DER_VUELVE
+			DER_VUELVE:
 				;----------
-				MOV AL, 09H 									; MUEVO 9 A AL
-				MUL CX 											; MMULTIPLICO AL * CL 
-				ADD BX, AX 										; SUMO A BX LO QUE SE MOVIO AL
-				ADD SI, AX 										; TAMBIEN SUMO AL A SI
+				; AUMENTO
 				;----------
-				INC CX 											; INCREMENTO CX
-				JMP LOOP_DER 									; VUELVE A INICIAR
+				ADD BX, 09H										; AUMENTAR UNA POSICION EN BX EN EL ARREGLO DE FUNCION
+				ADD SI, 09H 									; AUMENTAR UNA POSICION EN SI EN EL ARREGLO DE DERIVADA
+				INC CX											; INCREMENTO EL CONTADOR
+				MOV byte[tipo_term], 003h
+				JMP LOOP_DER
 		;-------------
 		FIN:
 		POP SI
@@ -407,7 +507,8 @@ section .text
 		PUSH DI
 		PUSH SI
 		;------
-
+		PRINTSTRING mder0
+		IMPRIMECHAR 10
 		;------
 		POP SI
 		POP DI
@@ -425,7 +526,8 @@ section .text
 		PUSH DI
 		PUSH SI
 		;------
-
+		PRINTSTRING mder1
+		IMPRIMECHAR 10
 		;------
 		POP SI
 		POP DI
@@ -443,7 +545,37 @@ section .text
 		PUSH DI
 		PUSH SI
 		;------
-
+		MOV byte[coef_num], 0h
+		CL_STRING coef 											; LIMPIO EL COEFICIENTE
+		CL_STRING expo 											; LIMPIO EL EXPONENTE
+		CL_STRING salida
+		GET_NUM BX, CL 											; OBTENGO EL NUMERO
+		GET_EXP BX, CL 											; OBTENGO EL EXPONENTE
+		COUNT coef, [tam] 										; CUENTO EL TAMANO DEL COEFICIENTE
+		CMP byte[tam], 01h 										; SI ES 1?
+		JE P_COEF1 												; SI SI.. VAS A PROCESAR EL COEF 1
+		JMP P_COEF2 											; SI NO FIJO TE VAS AL COEF 2
+		;---------
+		P_COEF1:
+			TO_NUM1 coef, byte[coef_num] 							; OBTENGO EL NUMERO DE COEFICIENTE EN HEXA
+			JMP P_CONT
+		P_COEF2:
+			TO_NUM2 coef, byte[coef_num]							; OBTNEGO EL COEFICIENTE DE DOS DIGITOS
+			JMP P_CONT
+		;---------
+		P_CONT:
+			XOR DX, DX
+			XOR AX, AX
+			MOV DL, byte[expo]									; GUARDO EL EXPONENTE
+			SUB DL, 30H 										; LE SUBSTRAIGO 30H PARA PODER OBTENER EL NUMERO EN HEXA
+			MOV AL, byte[coef_num]								; GUARDO EL COEFICIENTE EN AL PARA HACER LA MULTIPLICACION
+			MUL DL 												; MULTIPLICO DL * AL
+			MOV AH, 00H
+			MOV word[resul], AX 								; GUARDO EL RESULTADO
+			NUM_TO_CHAR resul, charArr 							; CONVIERTO EL NUMERO A ARREGLO
+			NUM_SALIDA charArr, salida 							; CONVIERTO EL ARREGLO EN STRING DE SALIDA
+			PRINTSTRING salida
+			IMPRIMECHAR 10
 		;------
 		POP SI
 		POP DI
@@ -757,8 +889,60 @@ section .text
 			MOV byte[SI], AL 				; GUARDO EL EXPONENTE EN AL
 			RET
 	
+	;--------------------------------------
+	; IMPRIME FUNCION - DERIVADA - INTEGRAL
+	;--------------------------------------
+	IMPRIME_FUNCION:
+		PUSH BX
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		PUSH DI
+		PUSH SI
+		;------
+		MOV SI, funcion
+		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
+		IMPRIMECHAR 10
+		;------
+		POP SI
+		POP DI
+		POP DX
+		POP CX
+		POP AX
+		POP BX
+		RET
 
-
+	IMPRIME_DERIVADA:
+		PUSH BX
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		PUSH DI
+		PUSH SI
+		;------
+		MOV SI, derivada
+		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
+		IMPRIMECHAR 10
+		;------
+		POP SI
+		POP DI
+		POP DX
+		POP CX
+		POP AX
+		POP BX
+		RET
 	;--------------------------------------
 	; OBTIENE UN CARACTER, SALIDA EN AL
 	;--------------------------------------
@@ -860,6 +1044,83 @@ section .text
 			RET
 
 	;--------------------------------------
+	; PARA CONVERTIR UN NUMERO A CHAR
+	;--------------------------------------
+	DEC_TO_CHAR:
+		LOOPCHAR1:
+			MOV CX, 00H 					; MUEVO EL CONTADOR DE 16BITS
+			MOV DH, 00H
+			MOV DL, 0AH 					; MUEVO EL 10 EL REGISTRO DL
+			;-DIVISION
+			LOOPCHAR2:
+				CMP AX, DX 					; IF (AX < DL)
+				JL ENDLOOPC2
+				SUB AX, DX 					; AX = AX - DL
+				INC CX
+				JMP LOOPCHAR2
+			ENDLOOPC2:
+			;---------
+			ADD AX, 030H 					; LE SUMO 30
+			MOV byte[BX], AL 				; MUEVO EL RESIDUO
+			MOV AX, CX 						; MUEVO EL COCIENTE PARA LA SIGUIENTE DIVISION
+			CMP AX, 00H 					; ES EL COCIENTE 0 ?
+			JE ENDLOOP1         			; SI LO ES, TERMINA...
+			INC BX
+			JMP LOOPCHAR1 					; SI NO PUES ENTONCES CONTINUA
+		ENDLOOP1:
+			INC BX
+			MOV byte[BX], '$'
+			XOR BX, BX
+			RET
+
+	MOSTRARRESP1:
+		MOV CX , '$'			; MI SIGNO DE FINALIZACION
+		PUSH CX 				; METO "$"
+		LOOPMOS1:
+			XOR AL, AL		 	; LIMPIO AL
+			MOV AL, byte[BX]    ; MUEVO EL CARACTER AL
+			CMP AL, '$'			; ES SIMBOLO DE DOLAR?
+			JE ENDMOS1 			; TERMINA
+		MUESTRA1:
+			XOR AH, AH 			; LIMPIO LOS REGISTRO AH
+			XOR DX, DX			; LIMPIO DX PARA USARLOS
+			;IMPRIMECHAR AL 		; LO ENVIO DE PARAMETRO
+			MOV CX, AX			; MUEVO LO QUE TRAE AL
+			PUSH CX				; VUELVO A PUSHEAR
+			INC BX				; INCREMENTO BX
+			JMP LOOPMOS1
+		ENDMOS1:
+			CALL MOSTRARAUX1
+			RET
+
+	MOSTRARAUX1:
+		;XOR CX, CX
+		POP CX
+		LOOPAUX1:
+			XOR CX, CX
+			POP CX
+			CMP CL, '$'
+			JE ENDAUX1
+			;IMPRIMECHAR CL
+			;===============
+			PUSH BX
+			PUSH AX
+			PUSH CX 
+			PUSH DX
+			;=========
+			;MOV byte[charaux], CL 
+			;write_in_file [repHandle], 01H, charaux
+			MOV byte[SI], CL
+			INC SI 
+			;=========
+			POP DX 
+			POP CX 
+			POP AX
+			POP BX
+			;=============== 
+			JMP LOOPAUX1
+		ENDAUX1:
+			RET
 	; SALIDA DEL PROGRAMA
 	;--------------------------------------
 	EXIT:
