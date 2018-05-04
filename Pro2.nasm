@@ -2,7 +2,8 @@
 ;*															SECCION DE BSS																			 *
 ;*****************************************************************************************************************************************************
 section .bss
-
+memhandle  resb 2
+pathHandle resb 2
 
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE DATA																			 *
@@ -43,7 +44,7 @@ section .data
 	MOV DX, %1 					; NOMBRE DEL ARCHIVO
 	INT 21H						; LLAMADA A LA INTERRUPCION PARA ABRIR
 
-	;JC USERFILE_ERR 		    ; SI HUBO UN ERROR....
+	JC ERROR_FILE   		    ; SI HUBO UN ERROR....
 
 	MOV %2, AX	 				; MUEVO EL HANDLE AL PARAMETRO 2
 %endmacro
@@ -59,7 +60,7 @@ section .data
 	MOV DX, %2 					; EN DONDE SE DEPOSITARAN LOS CARACTERES LEIDOS
 	INT 21H
 	
-	;JC USERFILE_ERR 	
+	JC ERROR_FILE 	
 
 	MOV %3, AX 					; PONGO EL NUMERO DE CARACTERES LEIDOS
 %endmacro
@@ -76,7 +77,7 @@ section .data
 	MOV CX, 00H                 ; CREACION DE UN ARCHIVO NORMAL
 	INT 21H
 
-	;JC USERFILE_ERR 
+	JC ERROR_FILE 
 
 	MOV %2, AX 					; HANDLE DEL ARCHIVO
 %endmacro
@@ -339,10 +340,31 @@ section .data
 	POP AX
 	POP BX
 %endmacro
+%macro GUARDA_FUN 1  			; P1: DIRECCION DE LA FUNCION QUE VOY A ESCRIBIR, P2: NOMBRE DEL ARCHIVO DONDE LO VOY A HACER
+	PUSH BX
+	PUSH CX
+	PUSH DX 
+	PUSH AX
+	PUSH SI
+	PUSH DI
+	;***************
+	MOV SI, %1
+	CALL ESCRIBE_F
+	;***************
+	POP DI
+	POP SI
+	POP AX 
+	POP DX
+	POP CX
+	POP BX 
+%endmacro
 ;=====================================================================================================================================================
 pausemens           db 10,"** PRESS ANY KEY TO CONTINUE.... ***$"
+errorMSG 			db 10,"** ERROR PARA ABRIR UN ARCHIVO *****$"
 igualdad            db  0 										; BANDERA QUE VA A USARSE PARA SABER SI DOS STRINGS SON IGUALES
 mensal              db 10,"********** SALIENDO ..... **********",10,13,"$"
+correcto 			db "********* FUNCION INGRESADA Y GUARDADA CORRECTAMENTE ********$"
+memoria 			dw "mt.txt$"
 ;--------------------------------------
 ; MENU PRINCIPAL
 ;--------------------------------------
@@ -386,6 +408,20 @@ int_menu 			db "*********************************************************",10,13
 					db "* INGRESE LA FUNCION:                                   *",10,13,
 					db "*********************************************************",10,13,
 					db " >> $"
+
+ing_menu            db "*********************************************************",10,13,
+					db "*                 INGRESAR UNA FUNCION                  *",10,13,
+					db "*********************************************************",10,13,
+					db "* INGRESE LA FUNCION:                                   *",10,13,
+					db "*********************************************************",10,13,
+					db " >> $"
+
+ruta_menu 			db "*********************************************************",10,13,
+					db "*             INGRESAR LA RUTA DE ARCHIVO               *",10,13,
+					db "*********************************************************",10,13,
+					db "* RUTA DEL ARCHIVO:                                     *",10,13,
+					db "*********************************************************",10,13,
+					db " >> $"		
 ;----------------------------------------------------------------------------------------------------
 funcion 			db "$$$$$$$$$" 													; ALMACENA
 					db "$$$$$$$$$" 													; TERMINOS DE 
@@ -407,6 +443,8 @@ integral 			db "$$$$$$$$$" 													; ALMACENA LA INTEGRAL DE LA FUNCION
 
 tipo_term 			db 0h
 
+charAux 			db 00h
+
 coef 	times 5     db "$" 															; ALMACENA EL COEFICIENTE DEL TERMINO A PROCESAR
 expo 	times 3     db "$" 															; ALMACENA EL EXPONENETE DEL TERMIO A PROCESAR
 vari    times 2 	db "$"
@@ -427,7 +465,25 @@ int_num 			db 00h
 
 entero 				db 00H
 decimal 			db 00h
+
+contenido times 255 db '$'
+
+contenido2 times 255 db '$'
+
+auxiliar times 50   db '$'
+;*****************************************************************************************************
+
+;*****************************************************************************************************
+menu_ing 			db "*********************************************************",10,13,
+					db "*                 MENU PRINCIPAL CALCULADORA            *",10,13,
+					db "*********************************************************",10,13,
+					db "*  1) INGRESO DE FUNCION                                *",10,13,
+					db "*  2) CARGA DE FUNCIONES                                *",10,13,
+					db "*  3) SALIR A MENU PRINCIPAL                            *",10,13,
+					db "*********************************************************",10,13,
+					db "* >> $"
 ;-----------------------------------------------------------------------------------------------------
+path 	 times 50   dw "$"
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE TEXT																			 *
 ;*****************************************************************************************************************************************************
@@ -465,6 +521,29 @@ section .text
 	SALIR_PROGRAMA:
 		CALL EXIT
 
+	W_FUN:
+		CL_STRING contenido
+		;*******************************************************************
+		; AQUI HARE EL PROCESO DE ESCRIBIR LAS FUNCIONES
+		;*******************************************************************
+		;-- ABRIR:
+			open_file memoria, [memhandle]
+		;-- LEER:
+			read_file [memhandle], contenido, [tam]
+			;PRINTSTRING contenido
+		;-- CERRAR:
+			close_file [memhandle]
+		;-- CREAR NUEVO:
+			create_file memoria, [memhandle]
+		;-- ESCRIBE LA FUNCION INGRESADA
+			GUARDA_FUN funcion
+			MOV byte[charAux], ';'
+			write_in_file [memhandle], 01h, charAux
+			COUNT contenido, [tam]
+			write_in_file [memhandle], [tam], contenido
+			close_file [memhandle]
+			RET
+
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE DERIVAR   																	 *
 ;*****************************************************************************************************************************************************
@@ -476,16 +555,17 @@ section .text
 		IN_STRING entrada 										; OBTENGO LA ENTRADA DEL TECLADO
 		ANALIZAR entrada 										; ANALIZA LA ENTRADA PARA PODER  TOMAR LOS TERMINOS DE LA FUNCION
 		CMP byte[error], 01h
-		JE MENU_PRINCIPAL
+		JE ERROR_ANALIZAR
 		;*-------------------------------------------------------
 		; LLAMADA ALA DERIVADA
 		CALL DERIVA_FUNCION
 		;*------------------------------------------------------- 
+		CALL W_DER
+		CALL W_FUN
 		CALL LIMPIAR_FUN
 		CALL LIMPIAR_DERIVADA
 		CALL SYSPAUSE 											; PAUSA
 		JMP MENU_PRINCIPAL
-
 
 	DERIVA_FUNCION:
 		PUSH BX
@@ -698,6 +778,29 @@ section .text
 		POP BX
 		RET
 
+	W_DER:
+		CL_STRING contenido
+		;*******************************************************************
+		; AQUI HARE EL PROCESO DE ESCRIBIR LAS FUNCIONES
+		;*******************************************************************
+		;-- ABRIR:
+			open_file memoria, [memhandle]
+		;-- LEER:
+			read_file [memhandle], contenido, [tam]
+			;PRINTSTRING contenido
+		;-- CERRAR:
+			close_file [memhandle]
+		;-- CREAR NUEVO:
+			create_file memoria, [memhandle]
+		;-- ESCRIBE LA FUNCION INGRESADA
+			GUARDA_FUN derivada
+			MOV byte[charAux], ';'
+			write_in_file [memhandle], 01h, charAux
+			COUNT contenido, [tam]
+			write_in_file [memhandle], [tam], contenido
+			close_file [memhandle]
+			RET
+
 ;***************************************************************************************************
 ;*								ANALIZADOR LEXICO                           					   *
 ;***************************************************************************************************
@@ -818,11 +921,11 @@ section .text
 
 	ERROR_A:
 		MOV byte[error], 01h
-		CALL CLS
-		IMPRIMECHAR 10
-		PRINTSTRING error_analisis
-		IMPRIMECHAR 10
-		CALL SYSPAUSE
+		;CALL CLS
+		;IMPRIMECHAR 10
+		;PRINTSTRING error_analisis
+		;IMPRIMECHAR 10
+		;CALL SYSPAUSE
 		RET
 
 	ACEPTAR:
@@ -866,6 +969,7 @@ section .text
 		ADD DI, 09H
 		CL_STRING DI
 		RET
+
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE INTEGRAR      																 *
 ;*****************************************************************************************************************************************************	
@@ -878,7 +982,7 @@ section .text
 		IN_STRING entrada 										; INGRESO LA FUNCION
 		ANALIZAR entrada 										; ANALIZAR LA ENTRADA
 		CMP byte[error], 01h 									; HUBO ERROR EN ANALISIS?
-		JE MENU_PRINCIPAL
+		JE ERROR_ANALIZAR
 		;--------------------------------------------------------
 		; LLAMADA A LA INTEGRAL DE LA FUNCION
 		;--------------------------------------------------------
@@ -894,6 +998,8 @@ section .text
 		IMPRIMECHAR 'C'
 		IMPRIMECHAR 10
 		;--------------------------------------------------------
+		CALL W_INTE
+		CALL W_FUN
 		CALL LIMPIAR_FUN
 		CALL LIMPIAR_INT
 		CALL SYSPAUSE
@@ -1193,15 +1299,149 @@ section .text
 		POP BX
 		RET
 
+	W_INTE:
+		CL_STRING contenido
+		;*******************************************************************
+		; AQUI HARE EL PROCESO DE ESCRIBIR LAS FUNCIONES
+		;*******************************************************************
+		;-- ABRIR:
+			open_file memoria, [memhandle]
+		;-- LEER:
+			read_file [memhandle], contenido, [tam]
+			;PRINTSTRING contenido
+		;-- CERRAR:
+			close_file [memhandle]
+		;-- CREAR NUEVO:
+			create_file memoria, [memhandle]
+		;-- ESCRIBE LA FUNCION INGRESADA
+			GUARDA_FUN integral
+			MOV byte[charAux], ';'
+			write_in_file [memhandle], 01h, charAux
+			COUNT contenido, [tam]
+			write_in_file [memhandle], [tam], contenido
+			close_file [memhandle]
+			RET
+
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE INGRESAR FUNCIONES	        												 *
 ;*****************************************************************************************************************************************************
 	OP_IN_FUN:
 		CALL CLS
-		IMPRIMECHAR 'I'
-		IMPRIMECHAR 'F'
+		PRINTSTRING menu_ing
+		CALL GETCHAR
+		CMP AL, '1' 										; ES OPCION 1?
+		JE INGRESO_MANUAL
+		CMP AL, '3' 										; ES OPCION 3?
+		JE MENU_PRINCIPAL
+		CMP AL, '2' 										; ES OPCION 2?
+		JE INGRESO_ARCHIVO
+		JMP OP_IN_FUN
+
+	INGRESO_MANUAL:
+		CALL CLS
+		CL_STRING entrada
+		PRINTSTRING ing_menu
+		IN_STRING entrada
+		ANALIZAR entrada
+		CMP byte[error], 01h
+		JE OP_IN_FUN
+		;*******************************************************************
+		; AQUI HARE EL PROCESO DE ESCRIBIR LAS FUNCIONES
+		;*******************************************************************
+		;-- ABRIR:
+			open_file memoria, [memhandle]
+		;-- LEER:
+			read_file [memhandle], contenido, [tam]
+			;PRINTSTRING contenido
+		;-- CERRAR:
+			close_file [memhandle]
+		;-- CREAR NUEVO:
+			create_file memoria, [memhandle]
+		;-- ESCRIBIR LA INGRESADA:
+			COUNT entrada, [tam]
+			write_in_file [memhandle], [tam], entrada
+			MOV byte[charAux], ';'
+			write_in_file [memhandle], 01h, charAux
+			COUNT contenido, [tam]
+			write_in_file [memhandle], [tam], contenido
+			close_file [memhandle]
+		;*******************************************************************
+		IMPRIMECHAR 10
+		PRINTSTRING correcto
+		IMPRIMECHAR 10
 		CALL SYSPAUSE
-		JMP MENU_PRINCIPAL
+		JMP OP_IN_FUN
+
+	INGRESO_ARCHIVO:
+		CALL CLS
+		CL_STRING contenido2
+		CL_STRING path
+		PRINTSTRING ruta_menu
+		IN_STRING path
+		;********************************************************************
+		; LECTURA DEL ARCHIVO
+		;********************************************************************
+		; -- ABRIR EL ARCHIVO:
+			open_file path, [pathHandle]
+		; -- LEER EL ARCHIVO:
+			read_file [pathHandle], contenido2, [tam]
+		; -- CERRAR EL ARCHIVO:
+			close_file [pathHandle]
+		; -- VER CONTENIDO:	
+		;********************************************************************
+		CALL PARSE_CONTENIDO
+		CALL SYSPAUSE
+		JMP OP_IN_FUN
+
+	PARSE_CONTENIDO:
+		PUSH BX
+		PUSH CX
+		PUSH DX
+		PUSH SI
+		PUSH DI
+		PUSH AX
+		;***************
+		MOV BX, contenido2
+		MOV CX, 00H
+		LOOP_PARSE:
+			CMP CX, 014H 											; YA LLEGO A 14?
+			JE FIN_PARSE 											; SI ES ASI ENTONCES PARA
+			CL_STRING auxiliar
+			MOV SI, auxiliar
+			LOOP_CONT:
+				CMP byte[BX], '$'									; TERMINO LA CADENA
+				JE FIN_PARSE
+				CMP byte[BX], ';' 									; LLEGO? AL FINAL DE UNA FUNCION?
+				JE FIN_CONT
+				MOV AL, byte[BX] 									; GUARDO EL CARACTER EN AL 
+				MOV byte[SI], AL 									; GUARDO EL CARACTER
+				INC BX
+				INC SI
+				JMP LOOP_CONT
+			FIN_CONT:
+			ANALIZAR auxiliar
+			CMP byte[error], 01h 
+			JE PARSE_INC
+			;-GUARDO LA FUNCION
+			PUSH BX
+			PUSH CX
+			CALL W_FUN 												; ALMACENO LA FUNCION EN CUESTION
+			POP CX
+			POP BX
+			;------------------
+			PARSE_INC:
+			INC BX
+			INC CX
+			JMP LOOP_PARSE
+		FIN_PARSE:
+		;***************
+		POP AX
+		POP DI
+		POP SI
+		POP DX
+		POP CX
+		POP BX
+		RET
 
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE IMPRIMIR FUNCIONES 															 *
@@ -1452,6 +1692,48 @@ section .text
 		MOV AL, 02H
 		INT 10h
 		RET
+
+	;-----------------------------------------
+	; ESCRIBE LA FUNCION, INTEGRAL O DERIVADA
+	;----------------------------------------
+	ESCRIBE_F:
+		COUNT SI, [tam]
+		write_in_file [memhandle], [tam], SI
+		ADD SI, 09H
+		COUNT SI, [tam]
+		write_in_file [memhandle], [tam], SI
+		ADD SI, 09H
+		COUNT SI, [tam]
+		write_in_file [memhandle], [tam], SI
+		ADD SI, 09H
+		COUNT SI, [tam]
+		write_in_file [memhandle], [tam], SI
+		ADD SI, 09H
+		COUNT SI, [tam]
+		write_in_file [memhandle], [tam], SI
+		ADD SI, 09H
+		RET
+	
+
+
+	;--------------------------------------
+	; ERROR AL ABRIR UN ACRHIVO
+	;--------------------------------------
+	ERROR_FILE:
+		CALL CLS
+		PRINTSTRING errorMSG
+		IMPRIMECHAR 10
+		CALL SYSPAUSE
+		JMP MENU_PRINCIPAL
+	
+	ERROR_ANALIZAR:
+		CALL CLS
+		IMPRIMECHAR 10
+		PRINTSTRING error_analisis
+		IMPRIMECHAR 10
+		CALL SYSPAUSE
+		JMP MENU_PRINCIPAL
+
 
 	;--------------------------------------
 	; INGRESA UN STRING HASTA SALTO DE LINEA
