@@ -378,6 +378,7 @@ entrada times 255   db "$"
 separador           db "*********************************************************",'$'
 resDer1 			db " FUNCION INGRESADA >> $"
 resDer2 			db " DERIVADA DE FUNCION >> $"
+resInt 				db " INTEGRAL DE FUNCION >> $"
 ;----------------------------------------------------------------------------------------------------
 int_menu 			db "*********************************************************",10,13,
 					db "*                 INTEGRAR UNA FUNCION                  *",10,13,
@@ -396,6 +397,11 @@ derivada 			db "$$$$$$$$$"													; ALMACENA
 					db "$$$$$$$$$"													; DE LA FUNCION
 					db "$$$$$$$$$"													; DERIVADA
 
+integral 			db "$$$$$$$$$" 													; ALMACENA LA INTEGRAL DE LA FUNCION
+					db "$$$$$$$$$"
+					db "$$$$$$$$$"
+					db "$$$$$$$$$"
+
 tipo_term 			db 0h
 
 coef 	times 5     db "$" 															; ALMACENA EL COEFICIENTE DEL TERMINO A PROCESAR
@@ -413,6 +419,11 @@ resul 				dw 0h
 charArr 			db '$'
 
 error 				db 00h
+
+int_num 			db 00h
+
+entero 				db 00H
+decimal 			db 00h
 ;-----------------------------------------------------------------------------------------------------
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE TEXT																			 *
@@ -767,7 +778,6 @@ section .text
 		SALTA_3:
 			JMP STATE_3
 
-
 	STATE_3:
 		CMP byte[BX], '$'										; ES EL FINAL DE LA CADENA?
 		JE ACEPTAR 												; ACEPTA LA CADENA
@@ -813,23 +823,6 @@ section .text
 		RET
 
 	ACEPTAR:
-		;CALL CLS
-		;IMPRIMECHAR 10
-		;PRINTSTRING aceptado
-		;IMPRIMECHAR 10
-		;MOV DI, funcion
-		;PRINTSTRING DI
-		;IMPRIMECHAR 10
-		;ADD DI, 09H
-		;PRINTSTRING DI
-		;IMPRIMECHAR 10
-		;ADD DI, 09H
-		;PRINTSTRING DI
-		;IMPRIMECHAR 10
-		;ADD DI, 09H
-		;IMPRIMECHAR 10
-		;CALL LIMPIAR_FUN
-		;CALL SYSPAUSE
 		RET
 
 	LIMPIAR_FUN:
@@ -854,16 +847,247 @@ section .text
 		CL_STRING DI
 		RET
 
+	LIMPIAR_INT:
+		MOV DI, integral
+		CL_STRING DI
+		ADD DI, 09H
+		CL_STRING DI
+		ADD DI, 09H
+		CL_STRING DI
+		ADD DI, 09H
+		CL_STRING DI
+		RET
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE INTEGRAR      																 *
 ;*****************************************************************************************************************************************************	
 	OP_INTEGRAR:
+		MOV byte[vari], 'x'										; EN CASO DE QUE VENGA LA INTEGRAL DE UNA CONSTANTE
 		MOV byte[error], 00h
 		CL_STRING entrada 										; LIMPIO LA ENTRADA
 		CALL CLS 												; LIMPIO LA PANTALLA
-
+		PRINTSTRING int_menu	 								; IMPRIMO EL MENU DE INEGRAR UNA FUNCION 
+		IN_STRING entrada 										; INGRESO LA FUNCION
+		ANALIZAR entrada 										; ANALIZAR LA ENTRADA
+		CMP byte[error], 01h 									; HUBO ERROR EN ANALISIS?
+		JE MENU_PRINCIPAL
+		;--------------------------------------------------------
+		; LLAMADA A LA INTEGRAL DE LA FUNCION
+		;--------------------------------------------------------
+		CALL INTEGRA_FUNCION
+		PRINTSTRING separador
+		IMPRIMECHAR 10 
+		PRINTSTRING resDer1
+		CALL IMPRIME_FUNCION
+		IMPRIMECHAR 10 
+		PRINTSTRING resInt
+		CALL IMPRIME_INTEGRAL
+		IMPRIMECHAR 10
+		;--------------------------------------------------------
+		CALL LIMPIAR_FUN
+		CALL LIMPIAR_INT
 		CALL SYSPAUSE
 		JMP MENU_PRINCIPAL
+
+	INTEGRA_FUNCION:
+		PUSH BX
+		PUSH CX
+		PUSH DX
+		PUSH AX
+		PUSH SI
+		PUSH DI
+		;----------------------
+		; INICIA LA DERIVACION
+		;----------------------
+		MOV BX, funcion
+		MOV CX, 00H
+		MOV SI, integral
+		LOOP_INT:
+			CMP CL, 03H 										; CONTADOR PARA PODER LLEVAR EL CONTROL
+			JG FIN_INT
+			EVALUA_TERM funcion, CL 							; EVALUA EL TERMINO
+			CMP byte[tipo_term], 02H							; EVALUO EL TERMINO
+			JE LLAMA_INT2
+			CMP byte[tipo_term], 01H 							; EVALUO EL TERMINO
+			JE LLAMA_INT1
+			CMP byte[tipo_term], 00H 							; EVALUO EL TERMINO
+			JE LLAMA_INT0
+			JMP INT_VUELVE
+			LLAMA_INT0:
+				CALL INTEGRA0
+				JMP INT_VUELVE
+			LLAMA_INT1:
+				CALL INTEGRA1
+				JMP INT_VUELVE
+			LLAMA_INT2:
+				CALL INTEGRA2
+				JMP INT_VUELVE
+			INT_VUELVE:
+				ADD BX, 09H
+				ADD SI, 09H
+				INC CX
+				MOV byte[tipo_term], 000h
+				JMP LOOP_INT
+		;----------------------
+		FIN_INT:
+		PRINTSTRING separador
+		IMPRIMECHAR 10
+		POP DI
+		POP SI
+		POP AX
+		POP DX
+		POP CX
+		POP BX
+		RET
+
+	INTEGRA0:
+		PUSH BX
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		PUSH DI
+		PUSH SI
+		;------
+		CL_STRING coef 											; LIMPIO EL COEFICIENTE
+		GET_NUM BX, 00H 										; OBTENER EL COEFICIENTE
+		MOV DL, byte[BX] 										; OBTENGO EL SIGNO DE EL TERMINO
+		MOV byte[SI], DL 										; SI ++
+		INC SI
+		MOV DI, coef 											; MUEVO EL COEFICIENTE
+		I_SAL:
+			CMP byte[DI], '$'									; LLEGUE AL SIGNO DE DOLAR?
+			JE I_SAL_FIN
+			MOV DL, byte[DI]									; SI NO ENTONCES EMPIEZO A COLOLAR EL COEFICIENTE
+			MOV byte[SI], DL 									; PONGO EL CARACTER
+			INC SI
+			INC DI
+			JMP I_SAL
+		I_SAL_FIN:
+		;------
+		MOV DL, byte[vari]										; MUEVO LA VARIABLE
+		MOV byte[SI], DL 										; LA COLOCO EN LA SALIDA
+		POP SI
+		POP DI
+		POP DX
+		POP CX
+		POP AX
+		POP BX
+		RET
+
+	INTEGRA1:
+		PUSH BX
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		PUSH DI
+		PUSH SI
+		;------
+		CL_STRING salida
+		CL_STRING charArr
+		CL_STRING coef 											; LIMPIO EL COEFICIENTE
+		CL_STRING vari 											; LIMPIO LA VARIABLE
+		GET_NUM BX, 00H 										; OBTENGO EL COEFICIENTE
+		GET_VAR BX, 00H 										; OBTENGO LA VARIABLE
+		;----------------
+		; COLOCANDO SIGNO
+		;----------------
+		MOV DL, byte[BX]										; GUARDO EL SIGNO DE LA EXPRESION
+		MOV byte[SI], DL 										; COLOCO EL SIGNO DE LA EXPRESION
+		INC SI 													; ME MUEVO A LA SIGUIENTE POSICION DE LA SALIDA DE LA INTEGRAL
+		;----DIVISION-------
+		COUNT coef, [tam]										; VER EL TAMANO DEL COEFICIENTE
+		CMP byte[tam], 01h 										; ES 1?
+		JE CONV_1
+		CMP byte[tam], 02h										; ES 2?
+		JE CONV_2
+		CONV_2:
+			TO_NUM2 coef, byte[coef_num]						; CONVIERTO EL COEFICIENTE EN NUMERO HEXA
+			JMP CONT_INT
+		CONV_1:
+			TO_NUM1 coef, byte[coef_num]						; CONVIERTO EL NUMERO
+			JMP CONT_INT
+		CONT_INT:
+		XOR AX, AX
+		MOV AL, byte[coef_num]									; MUEVO EL NUMERO PARA PODER HACER LA DIVISION CORRESPONDIENTE
+		MOV CL, 02h 											; MUEVO EL 2 PARA PODER REALIZAR LA DIVISION
+		DIV CL 													; HAGO LA DIVISION
+		MOV byte[resul], AL 									; MUEVO EL COCIENTE A LA PARTE ENTERA
+		MOV byte[entero], AH 									; GUARDO AH
+		NUM_TO_CHAR resul, charArr 								; CONVIERTO EL NUMERO A ARREGLO
+		NUM_SALIDA charArr, salida 								; CONVIERTO EL ARREGLO EN STRING DE SALIDA
+		;-------------------------
+		; ESCRIBO LA SALIDA
+		MOV DI, salida
+		W_SAL1:
+			CMP byte[DI], '$'									; ES UN SIGNO DE DOLAR?
+			JE W_SAL1_FIN
+			MOV DL, byte[DI]									; MUEVO EL CARACTER PARA PODER ESCRIBIRLO
+			MOV byte[SI], DL 									; ESCRIBO EL CARACTER
+			INC SI 												; SI ++
+			INC DI 												; DI ++
+			JMP W_SAL1
+		W_SAL1_FIN:
+		;-------------------------
+		CMP byte[entero], 00H 									; ES EL REMAINDER 0?
+		JE TERM_INT
+		CL_STRING charArr										; LIMPIO EL ARREGLO DE CHAR 
+		CL_STRING salida 										; LIMPIO LA SALIDA
+		MOV AL, AH 												; MUEVO EL RESIDUO A AL
+		XOR AH, AH 												; LIMPIO A AH
+		MOV CL, 0AH 											; MUEVO EL 10 A CL
+		MUL CL 													; AX * 10 
+		MOV CL, 02H 											; MUEVO 2 A CL 
+		DIV CL 													; DIVIDO AX / 2
+		MOV byte[resul], AL 									; MUEVO EL RESULTADO A DECIMAL
+		NUM_TO_CHAR resul, charArr 								; CONVIERTO EL NUMERO A ARREGLO
+		NUM_SALIDA charArr, salida 								; CONVIERTO EL ARREGLO EN STRING DE SALIDA
+		;-------------------------
+		; ESCRIBO . Y LA DIVISION 
+		;--------------------------
+		MOV byte[SI], '.'										; ESCRIBO EL PUNTO DECIMAL
+		INC SI
+		MOV DI, salida
+		W_SAL2:
+			CMP byte[DI], '$'									; ES UN SIGNO DE DOLAR?
+			JE W_SAL2_FIN
+			MOV DL, byte[DI]									; MUEVO EL CARACTER EN CUESTION
+			MOV byte[SI], DL 									; ESCRIBO EL CARACTER
+			INC SI
+			INC DI
+			JMP W_SAL2
+		W_SAL2_FIN:
+		;----FIN DIVISION-----------
+		TERM_INT:
+		MOV DL, byte[vari]										; MUEVO LA VARIABLE
+		MOV byte[SI], DL 										; ESCRIBO LA VARIABLE
+		INC SI
+		MOV byte[SI], '^'										; MUEVO EL SOMBRERO Y LUEGO PONGO EL EXPONENTE
+		INC SI
+		MOV byte[SI], '2'										; PONGO EL EXPONENTE
+		POP SI
+		POP DI
+		POP DX
+		POP CX
+		POP AX
+		POP BX
+		RET
+
+	INTEGRA2:
+		PUSH BX
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		PUSH DI
+		PUSH SI
+		;------
+		;------
+		POP SI
+		POP DI
+		POP DX
+		POP CX
+		POP AX
+		POP BX
+		RET
+
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE INGRESAR FUNCIONES	        												 *
 ;*****************************************************************************************************************************************************
@@ -1050,6 +1274,32 @@ section .text
 		PUSH SI
 		;------
 		MOV SI, derivada
+		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
+		;IMPRIMECHAR 10
+		;------
+		POP SI
+		POP DI
+		POP DX
+		POP CX
+		POP AX
+		POP BX
+		RET
+
+	IMPRIME_INTEGRAL:
+		PUSH BX
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		PUSH DI
+		PUSH SI
+		;------
+		MOV SI, integral
 		PRINTSTRING SI
 		ADD SI, 09H
 		PRINTSTRING SI
