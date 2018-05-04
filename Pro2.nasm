@@ -471,6 +471,8 @@ contenido times 255 db '$'
 contenido2 times 255 db '$'
 
 auxiliar times 50   db '$'
+
+contador 			db 00h
 ;*****************************************************************************************************
 
 ;*****************************************************************************************************
@@ -482,6 +484,10 @@ menu_ing 			db "*********************************************************",10,13
 					db "*  3) SALIR A MENU PRINCIPAL                            *",10,13,
 					db "*********************************************************",10,13,
 					db "* >> $"
+;-----------------------------------------------------------------------------------------------------
+menu_print          db "*********************************************************",10,13,
+					db "*                 FUNCIONES EN MEMORIA:                 *",10,13,
+					db "*********************************************************",10,'$'
 ;-----------------------------------------------------------------------------------------------------
 path 	 times 50   dw "$"
 ;*****************************************************************************************************************************************************
@@ -497,6 +503,9 @@ section .text
 
 
 	MENU_PRINCIPAL:
+		CALL LIMPIAR_FUN
+		CALL LIMPIAR_DERIVADA
+		CALL LIMPIAR_INT
 		CALL CLS
 		PRINTSTRING menu 										; IMPRIMIENDO EL MUNUN PRINCIPAL
 		CALL GETCHAR 											; OBTIENIENDO EL INGRESO DE LA ENTRADA DEL CARACTER
@@ -1390,6 +1399,9 @@ section .text
 		; -- VER CONTENIDO:	
 		;********************************************************************
 		CALL PARSE_CONTENIDO
+		IMPRIMECHAR 10
+		PRINTSTRING correcto
+		IMPRIMECHAR 10
 		CALL SYSPAUSE
 		JMP OP_IN_FUN
 
@@ -1447,10 +1459,105 @@ section .text
 ;*															SECCION DE IMPRIMIR FUNCIONES 															 *
 ;*****************************************************************************************************************************************************
 	OP_PR_FUN:
+		MOV byte[contador], 00h
 		CALL CLS
-		IMPRIMECHAR 'P'
+		PRINTSTRING menu_print
+		CALL READ_MEMORY
+		CALL COUNT_FUN
+		CALL PRINT_MEMORY
 		CALL SYSPAUSE
 		JMP MENU_PRINCIPAL
+
+	READ_MEMORY:
+		CL_STRING contenido
+		;***********************************
+		; LECTURA DE FUNCIONES EN MEMORIA
+		;***********************************
+		; -- LEER EL ARCHIVO:
+			open_file memoria, [memhandle]
+		; -- LEER EL ARCHIVO:
+			read_file [memhandle], contenido, [tam]
+		; -- CERRAR EL ARCHIVO:
+			close_file [memhandle]
+		; -- REGRESAR
+		RET
+
+	COUNT_FUN:
+		PUSH BX
+		PUSH CX
+		PUSH DI
+		;*********
+		MOV BX, contenido
+		XOR CX, CX
+		MOV CX, 00H
+		LOOP_COUNT:
+			CMP byte[BX], '$'									; ES EL FINAL DE LA CADENA?
+			JE END_COUNT
+			CMP byte[BX], ';'									; ES UN PUNTO Y COMA?
+			JNE JMP_COUNT
+			INC_COUNT:
+			INC CX
+			JMP_COUNT:
+			INC BX
+			JMP LOOP_COUNT 
+		END_COUNT:
+		;*********
+		MOV byte[contador], CL
+		CMP byte[contador], 0EH
+		JG SIGUE
+		MOV byte[contador], 0EH
+		SIGUE:
+		POP DI
+		POP CX
+		POP BX
+		RET
+
+	PRINT_MEMORY:
+		PUSH CX
+		PUSH BX
+		PUSH AX
+		PUSH SI 
+		CL_STRING auxiliar 										; LIMPIO LA CADENA AUXILIAR
+		MOV BX, contenido 										; PUNTERO AL CONTENIDO
+		XOR CX, CX
+		MOV CX, 00H
+		LOOP_PRINT:
+			CMP CL, byte[contador] 								; LLEGO YA AL TOPE?
+			JE END_LOOP_PRINT
+			CL_STRING auxiliar
+			MOV SI, auxiliar
+			IN_LOOP:
+				CMP byte[BX], '$' 									; TERMINO LA CADENA?
+				JE END_LOOP_PRINT
+				CMP byte[BX], ';'
+				JE IN_END
+				MOV AL, byte[BX]									; COPIO EL CARACTER
+				MOV byte[SI], AL 									; MUEVO EL CARACTER AL ALUXILIAR
+				INC SI
+				INC BX
+				JMP IN_LOOP
+			IN_END:
+			;********************
+			; IMPRIMO
+			;********************
+			IMPRIMECHAR '*'
+			IMPRIMECHAR ' '
+			IMPRIMECHAR '>'
+			IMPRIMECHAR '>'
+			IMPRIMECHAR ' '
+			PRINTSTRING auxiliar
+			IMPRIMECHAR 10
+			;********************
+			INC BX
+			INC CX 
+			JMP LOOP_PRINT
+		END_LOOP_PRINT:
+		PRINTSTRING separador
+		POP SI
+		POP AX
+		POP BX
+		POP CX
+		RET
 
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE GRAFICAR FUNCIONES															 *
@@ -1714,8 +1821,6 @@ section .text
 		ADD SI, 09H
 		RET
 	
-
-
 	;--------------------------------------
 	; ERROR AL ABRIR UN ACRHIVO
 	;--------------------------------------
@@ -1733,7 +1838,6 @@ section .text
 		IMPRIMECHAR 10
 		CALL SYSPAUSE
 		JMP MENU_PRINCIPAL
-
 
 	;--------------------------------------
 	; INGRESA UN STRING HASTA SALTO DE LINEA
