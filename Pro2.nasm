@@ -391,13 +391,16 @@ funcion 			db "$$$$$$$$$" 													; ALMACENA
 					db "$$$$$$$$$" 													; TERMINOS DE 
 					db "$$$$$$$$$"													; CADA
 					db "$$$$$$$$$"													; FUNCION
+					db "$$$$$$$$$"
 
 derivada 			db "$$$$$$$$$"													; ALMACENA
 					db "$$$$$$$$$" 													; TERMINOS 
 					db "$$$$$$$$$"													; DE LA FUNCION
 					db "$$$$$$$$$"													; DERIVADA
+					db "$$$$$$$$$"
 
 integral 			db "$$$$$$$$$" 													; ALMACENA LA INTEGRAL DE LA FUNCION
+					db "$$$$$$$$$"
 					db "$$$$$$$$$"
 					db "$$$$$$$$$"
 					db "$$$$$$$$$"
@@ -497,7 +500,7 @@ section .text
 		MOV CX, 00H												; CX CONTIENE 0 AHORA
 		MOV SI, derivada 										; SI APUNTA AL ARREGLO DE STRINGS DE LA DERIVADA
 		LOOP_DER:
-			CMP CL, 03h											; EL CONTADOR ES MAYOR A 3?
+			CMP CL, 04h											; EL CONTADOR ES MAYOR A 3?
 			JG FIN 												; SI ES MAYOR ENTONCES TERMINA
 			EVALUA_TERM funcion, CL 							; EVALULO LA POSICION CL DEL ARREGLO DE LA FUNCION
 			CMP byte[tipo_term], 02h 							; SI TIENE EXPONENTE
@@ -834,6 +837,8 @@ section .text
 		CL_STRING DI
 		ADD DI, 09H
 		CL_STRING DI
+		ADD DI, 09H
+		CL_STRING DI
 		RET
 
 	LIMPIAR_DERIVADA:
@@ -845,10 +850,14 @@ section .text
 		CL_STRING DI
 		ADD DI, 09H
 		CL_STRING DI
+		ADD DI, 09H
+		CL_STRING DI
 		RET
 
 	LIMPIAR_INT:
 		MOV DI, integral
+		CL_STRING DI
+		ADD DI, 09H
 		CL_STRING DI
 		ADD DI, 09H
 		CL_STRING DI
@@ -881,6 +890,8 @@ section .text
 		IMPRIMECHAR 10 
 		PRINTSTRING resInt
 		CALL IMPRIME_INTEGRAL
+		IMPRIMECHAR '+'
+		IMPRIMECHAR 'C'
 		IMPRIMECHAR 10
 		;--------------------------------------------------------
 		CALL LIMPIAR_FUN
@@ -902,7 +913,7 @@ section .text
 		MOV CX, 00H
 		MOV SI, integral
 		LOOP_INT:
-			CMP CL, 03H 										; CONTADOR PARA PODER LLEVAR EL CONTROL
+			CMP CL, 04H 										; CONTADOR PARA PODER LLEVAR EL CONTROL
 			JG FIN_INT
 			EVALUA_TERM funcion, CL 							; EVALUA EL TERMINO
 			CMP byte[tipo_term], 02H							; EVALUO EL TERMINO
@@ -1079,7 +1090,101 @@ section .text
 		PUSH DI
 		PUSH SI
 		;------
-		;------
+		CL_STRING vari 											; LIMPIO LA VARIABLE
+		CL_STRING coef 											; LIMPIO EL COEFICIENTE
+		CL_STRING expo 											; LIMPIO EL EXPONENTE
+		GET_NUM BX, 00H 										; OBTENGO EL COEFICIENTE DEL TERMINO
+		GET_VAR BX, 00H 										; OBTENGO LA VARIABLE DEL TERMINO
+		GET_EXP BX, 00H 										; OBTENGO EL EXPONENTE DEL TERMINO
+		ADD byte[expo], 01h 									; LE SUMO UNO AL EXPONENTE
+		;*****************
+		; COLOCANDO SIGNO
+		;*****************
+		MOV DL, byte[BX] 										; COLOCO EN DL EL SIGNO DEL TERMINO
+		MOV byte[SI], DL  										; COLOCO EN SI LA PRIMERA POSICION EL SIGNO DEL TERMINO
+		INC SI  												; INCREMENTO SI 
+		;*****************
+		COUNT coef, [tam]										; CUENTO EL NUMERO DE DIGITOS DEL COEFICIENTE
+		CMP byte[tam], 01h 										; TIENE TAMANO 1
+		JE UT1
+		CMP byte[tam], 02h 										; TIENE TAMANO 2
+		JE UT2
+		UT2:	
+			TO_NUM2 coef, byte[coef_num]
+			JMP CONT_INT2
+		UT1:
+			TO_NUM1 coef, byte[coef_num]
+			JMP CONT_INT2
+		CONT_INT2:
+		;*******************************************************
+		; INICIO DE DIVISION
+		;*******************************************************
+		MOV DL, byte[expo]
+		SUB DL, 30H
+		XOR AX, AX
+		MOV AL, byte[coef_num]									; MUEVO EL NUMERO PARA PODER HACER LA DIVISION CORRESPONDIENTE
+		MOV CL, DL 												; MUEVO EL 2 PARA PODER REALIZAR LA DIVISION
+		DIV CL 													; HAGO LA DIVISION
+		MOV byte[resul], AL 									; MUEVO EL COCIENTE A LA PARTE ENTERA
+		MOV byte[entero], AH 									; GUARDO AH
+		NUM_TO_CHAR resul, charArr 								; CONVIERTO EL NUMERO A ARREGLO
+		NUM_SALIDA charArr, salida 								; CONVIERTO EL ARREGLO EN STRING DE SALIDA
+		;******************************************************
+		; ESCRIBO LA SALIDA
+		;******************************************************
+		MOV DI, salida
+		W_SAL3:
+			CMP byte[DI], '$'									; ES SIGNO DE DOLDAR?
+			JE W_SAL3_FIN
+			MOV DL, byte[DI]									; MUEVO EL CARACTER
+			MOV byte[SI], DL 									; GUARDO EN SI, LO QUE TIENE DL
+			INC SI
+			INC DI
+			JMP W_SAL3
+		W_SAL3_FIN:
+		CMP byte[entero], 00h 									; ES CERO EL RESIDUO?
+		JE TERM_INT2
+		;******************************************************
+		CL_STRING charArr
+		CL_STRING salida
+		MOV CH, byte[expo]
+		SUB CH, 30H
+		MOV AL, AH 												; MUEVO EL RESIDUO A AL
+		XOR AH, AH 												; LIMPIO A AH
+		MOV CL, 0AH 											; MUEVO EL 10 A CL
+		MUL CL 													; AX * 10 
+		MOV CL, CH 	 											; MUEVO CH QUE ES EL EXPONENTE A CL 
+		DIV CL 													; DIVIDO AX / CH 
+		MOV byte[resul], AL 									; MUEVO EL RESULTADO A DECIMAL
+		NUM_TO_CHAR resul, charArr 								; CONVIERTO EL NUMERO A ARREGLO
+		NUM_SALIDA charArr, salida 								; CONVIERTO EL ARREGLO EN STRING DE SALIDA
+		;******************************************************
+		; ESCRIBO EL . Y LA DIVISION
+		;******************************************************
+		MOV byte[SI], '.'										; ESCRIBO EL PUNTO
+		INC SI
+		MOV DI, salida
+		;******************************************************
+		W_SAL4:
+			CMP byte[DI], '$'									; ES SIGNO DE DOLAR?
+			JE W_SAL4_FIN
+			MOV DL, byte[DI] 									; MUEVO LO QUE ESTA EN DI A DL
+			MOV byte[SI], DL 									; ESCRIBO EL CARACTER 
+			INC SI 
+			INC DI
+			JMP W_SAL4
+		W_SAL4_FIN:
+		;******************************************************
+		; FIN DE LA DIVISION
+		;******************************************************
+		TERM_INT2:
+		MOV DL, byte[vari] 										; MUEVO LA VARIABLE
+		MOV byte[SI], DL 										; COPIO EL CARACTER A SI 
+		INC SI 
+		MOV byte[SI], '^'										; MUEVO EL SOMBRERITO
+		INC SI
+		MOV DL, byte[expo]
+		MOV byte[SI], DL 
 		POP SI
 		POP DI
 		POP DX
@@ -1255,6 +1360,8 @@ section .text
 		PRINTSTRING SI
 		ADD SI, 09H
 		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
 		;IMPRIMECHAR 10
 		;------
 		POP SI
@@ -1281,6 +1388,8 @@ section .text
 		PRINTSTRING SI
 		ADD SI, 09H
 		PRINTSTRING SI
+		ADD SI, 09H
+		PRINTSTRING SI
 		;IMPRIMECHAR 10
 		;------
 		POP SI
@@ -1300,6 +1409,8 @@ section .text
 		PUSH SI
 		;------
 		MOV SI, integral
+		PRINTSTRING SI
+		ADD SI, 09H
 		PRINTSTRING SI
 		ADD SI, 09H
 		PRINTSTRING SI
