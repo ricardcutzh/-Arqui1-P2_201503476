@@ -358,6 +358,45 @@ section .data
 	POP CX
 	POP BX 
 %endmacro
+%macro A_NEGATIVO 1 			; P1: VARIABLE QUE QUIERO PASAR A NEGATIVO
+	PUSH AX 
+	XOR AL, AL 		; LIMPIO EL REGISTRO
+	MOV AL, byte[%1]; MUEVO LA VARIABLE AL REGISTRO 
+	NOT AL 			; APLICO NOT
+	ADD AL, 01H		; LE SUMO 1 A AL	
+	MOV [%1], AL 	; DEVUELVO AL PARAMETRO 1 A AL
+	POP AX
+%endmacro
+%macro POW 3  					; P1: NUMERO A ELEVAR, P2: EXPONENTE, P3: LUGAR DONDE SE ALMACENA LA RESPUESTA (WORD)
+	PUSH AX
+	PUSH BX
+	PUSH CX
+	PUSH DX
+	;---------
+	XOR BX, BX
+	XOR AX, AX
+	XOR DX, DX
+	XOR CX, CX 
+	MOV AX, %1 					; COLOCO EL NUMERO A ELEVAR EN AX
+	MOV BX, %1
+	MOV CL, %2 					; COLOCO EL EXPONENTE EN CX
+	CALL DO_POW 				; LLAMO A QUE HAGA EL ELEVADO
+	MOV %3, AX 					; MUEVO EL RESULTADO A LA VARIABLE
+	;---------
+	POP DX
+	POP CX
+	POP BX
+	POP AX
+%endmacro
+%macro A_NEGATIVO_W 1 			; P1: VARIABLE QUE QUIERO NEGATIVA
+	PUSH AX
+	XOR AX, AX
+	MOV AX, word[%1]			; MUEVO EL NUMERO EN LA VARIABLES
+	NOT AX 						; NUEGO AX
+	ADD AX, 01H 				; LE SUMO 1
+	MOV word[%1], AX 			; MUEVO AX A LA VRIABLE NUEVAMENTE		
+	POP AX 
+%endmacro
 ;=====================================================================================================================================================
 pausemens           db 10,"** PRESS ANY KEY TO CONTINUE.... ***$"
 errorMSG 			db 10,"** ERROR PARA ABRIR UN ARCHIVO *****$"
@@ -502,9 +541,17 @@ ban_grado 			db 00h
 ;-----------------------------------------------------------------------------------------------------
 msg_mayor 			db 10,"***************** LA ECUACION NO ES DE 2do GRADO *****************",10,'$'
 ;-----------------------------------------------------------------------------------------------------
-a 					db 00H
-b 					db 00h
-c 					db 00h
+a 					dw 00H
+b 					dw 00h
+c 					dw 00h 		 ; ESTOS ALMACENAN EL VALOR DA A,B,C
+s_a 				db 00h 
+s_b 				db 00h
+s_c 				db 00h       ; ESTOS ULTIMOS SE ENCARGAN DE VER QUE SIGNO TIENE CADA TERMINO
+;-----------------------------------------------------------------------------------------------------
+pow_resul 			dw 00h
+aux_resul1 			dw 00h
+aux_resul2 			dw 00h
+aux_resul3 			dw 00h
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE TEXT																			 *
 ;*****************************************************************************************************************************************************
@@ -514,6 +561,12 @@ section .text
 
 	MAIN:
 		ORG 100H
+		;POW 05H, 02H, word[pow_resul]
+		;NUM_TO_CHAR pow_resul, charArr 								; CONVIERTO EL NUMERO A ARREGLO
+		;NUM_SALIDA charArr, salida 								; CONVIERTO EL ARREGLO EN STRING DE SALIDA
+		;PRINTSTRING salida
+		;CALL SYSPAUSE
+		;CALL EXIT
 		JMP MENU_PRINCIPAL
 
 
@@ -1623,7 +1676,7 @@ section .text
 			PRINTSTRING separador
 			IMPRIMECHAR 10
 		; -- CALCULAR EL DISCRIMINANTE
-		
+			CALL DISCRIMINANTE
 		;--------------------------------------
 		FIN_RE:
 		;**************************************
@@ -1717,6 +1770,16 @@ section .text
 		PUSH AX
 		PUSH SI
 		;--------
+		MOV byte[s_a], 00h
+		PUSH BX
+		PUSH AX
+			MOV AL, byte[BX]									; MUEVE EL SIGNO PARA VER QUE ES
+			CMP AL, '-'
+			JNE N_A
+			MOV byte[s_a], 01H									; SI ES NEGATIVO ENTONCES ACTIVARE LA BANDERA DE NEGATIVOS  
+		N_A:
+		POP AX 
+		POP BX 
 		CL_STRING coef
 		CL_STRING salida
 		CL_STRING charArr
@@ -1738,6 +1801,8 @@ section .text
 		IMPRIMECHAR ' '
 		IMPRIMECHAR 'A'
 		IMPRIMECHAR ':'
+		MOV AL, byte[BX]
+		IMPRIMECHAR AL
 		;IMPRIMECHAR ' '
 		MOV AL, byte[coef_num]									; MUEVO A AL EL RESULTADO DEL COEFICIENTE
 		MOV byte[a], AL 										; MUEVO EL RESULTADO A a 273779
@@ -1745,6 +1810,10 @@ section .text
 		NUM_SALIDA charArr, salida
 		PRINTSTRING salida
 		IMPRIMECHAR ' '
+		CMP byte[s_a], 001h 	 								; ES NEGATIV0?
+		JNE FIN_A 												; SI NO LO ES.. ME LO SALTO
+		A_NEGATIVO a 											; PASO A NEGATIVO
+		FIN_A:
 		POP SI
 		POP AX
 		POP DX
@@ -1759,6 +1828,16 @@ section .text
 		PUSH AX
 		PUSH SI
 		;--------
+		MOV byte[s_b], 00h
+		PUSH BX
+		PUSH AX
+			MOV AL, byte[BX]									; MUEVE EL SIGNO PARA VER QUE ES
+			CMP AL, '-'
+			JNE N_B
+			MOV byte[s_b], 01H									; SI ES NEGATIVO ENTONCES ACTIVARE LA BANDERA DE NEGATIVOS  
+		N_B:
+		POP AX 
+		POP BX 
 		CL_STRING coef
 		CL_STRING salida
 		CL_STRING charArr
@@ -1778,6 +1857,8 @@ section .text
 		IMPRIMECHAR ' '
 		IMPRIMECHAR 'B'
 		IMPRIMECHAR ':'
+		MOV AL, byte[BX]
+		IMPRIMECHAR AL
 		;IMPRIMECHAR ' '
 		MOV AL, byte[coef_num]
 		MOV byte[b], AL
@@ -1785,6 +1866,10 @@ section .text
 		NUM_SALIDA charArr, salida
 		PRINTSTRING salida
 		IMPRIMECHAR ' '
+		CMP byte[s_b], 001h 	 								; ES NEGATIV0?
+		JNE FIN_B 												; SI NO LO ES.. ME LO SALTO
+		A_NEGATIVO b 											; PASO A NEGATIVO
+		FIN_B:
 		POP SI
 		POP AX
 		POP DX
@@ -1799,6 +1884,16 @@ section .text
 		PUSH AX
 		PUSH SI
 		;------
+		MOV byte[s_c], 00h
+		PUSH BX
+		PUSH AX
+			MOV AL, byte[BX]									; MUEVE EL SIGNO PARA VER QUE ES
+			CMP AL, '-'
+			JNE N_C
+			MOV byte[s_c], 01H									; SI ES NEGATIVO ENTONCES ACTIVARE LA BANDERA DE NEGATIVOS  
+		N_C:
+		POP AX 
+		POP BX 
 		CL_STRING coef
 		CL_STRING salida
 		CL_STRING charArr
@@ -1818,12 +1913,18 @@ section .text
 		IMPRIMECHAR ' '
 		IMPRIMECHAR 'C'
 		IMPRIMECHAR ':'
+		MOV AL, byte[BX]
+		IMPRIMECHAR AL
 		;IMPRIMECHAR ' '
 		MOV AL, byte[coef_num]
 		MOV byte[c], AL
 		NUM_TO_CHAR c, charArr 									; CONVIRTIENDO SOLO PARA VISUALIZAR
 		NUM_SALIDA charArr, salida
 		PRINTSTRING salida
+		CMP byte[s_c], 001h 	 								; ES NEGATIV0?
+		JNE FIN_C 												; SI NO LO ES.. ME LO SALTO
+		A_NEGATIVO c 											; PASO A NEGATIVO
+		FIN_C:
 		POP SI
 		POP AX
 		POP DX
@@ -1831,7 +1932,28 @@ section .text
 		POP BX
 		RET
 
-
+	DISCRIMINANTE:
+		PUSH BX
+		PUSH CX
+		PUSH DX
+		PUSH AX
+		;-------
+		CL_STRING salida
+		CL_STRING charArr
+		POW word[b], 02h, word[pow_resul] 						; HAGO EL ELEVADO DE B
+		MOV AX, 04H 											; MUEVO EL 4 A AX PARA HACER LA MULTIPLICACION
+		MOV BX, word[a]											; MUEVO A BX LO QUE CONTIENE A
+		MOV CX, word[c]											; MUEVO A CX LO QUE CONTIENE C 
+		MUL BX 													; 4 * A 
+		MUL CX 													; 4 * A * C
+		MOV word[aux_resul1], AX 								; MUVO EL RESULTADO
+		MOV AX, word[pow_resul]									; MUEVO B^2 A AX
+		MOV DX, word[aux_resul1]								; MUEVO 4 * A * C -> DX
+		
+		POP DX
+		POP CX
+		POP BX
+		RET 
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE REPORTES															             *
 ;*****************************************************************************************************************************************************
@@ -2028,6 +2150,7 @@ section .text
 		POP AX
 		POP BX
 		RET
+	
 	;--------------------------------------
 	; OBTIENE UN CARACTER, SALIDA EN AL
 	;--------------------------------------
@@ -2035,6 +2158,22 @@ section .text
 		MOV AH, 1
 		INT 21H
 		RET
+
+	;--------------------------------------
+	; LA POTENCIA
+	;--------------------------------------
+	DO_POW:	
+		; AQUI INICIA:
+		MOV CH, 00H 
+		SUB CL, 001h
+		POW_LOOP:
+			CMP CH, CL 						; EL CONTADOR YA LLEGO A N?
+			JE FIN_POW
+			MUL BX 							; MULTIPLICO AX POR DL
+			INC CH 							; INCREMENTO CH
+			JMP POW_LOOP 					; VUELVO A COMENZAR
+		FIN_POW:
+			RET
 
 	;--------------------------------------
 	; EL ANALOG AL SYSTEM PAUSE
