@@ -232,7 +232,7 @@ section .data
 	POP AX
 	POP BX
 %endmacro
-%macro GET_EXP 2
+%macro GET_EXP 2				; P1: CADENA, P2: INDICE
 	PUSH BX
 	PUSH AX
 	PUSH CX
@@ -422,6 +422,13 @@ ruta_menu 			db "*********************************************************",10,1
 					db "* RUTA DEL ARCHIVO:                                     *",10,13,
 					db "*********************************************************",10,13,
 					db " >> $"		
+
+resol_menu 			db "*********************************************************",10,13,
+					db "*         INGRESAR FUNCION DE 2DO GRADO                 *",10,13,
+					db "*********************************************************",10,13,
+					db "* INGRESAR FUNCION:                                     *",10,13,
+					db "*********************************************************",10,13,
+					db " >> $"		
 ;----------------------------------------------------------------------------------------------------
 funcion 			db "$$$$$$$$$" 													; ALMACENA
 					db "$$$$$$$$$" 													; TERMINOS DE 
@@ -490,6 +497,14 @@ menu_print          db "********************************************************
 					db "*********************************************************",10,'$'
 ;-----------------------------------------------------------------------------------------------------
 path 	 times 50   dw "$"
+;-----------------------------------------------------------------------------------------------------
+ban_grado 			db 00h
+;-----------------------------------------------------------------------------------------------------
+msg_mayor 			db 10,"***************** LA ECUACION NO ES DE 2do GRADO *****************",10,'$'
+;-----------------------------------------------------------------------------------------------------
+a 					db 00H
+b 					db 00h
+c 					db 00h
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE TEXT																			 *
 ;*****************************************************************************************************************************************************
@@ -610,9 +625,6 @@ section .text
 			LLAMA_DE2:
 				CALL DERIVA2									; LLAMADA ALA ENCARGADA DERIVAR EL QUE TIENE EXPONENTE
 				XOR AX, AX 										; LIMPIO AX
-				;IMPRIMECHAR 10
-				;CALL IMPRIME_DERIVADA
-				;IMPRIMECHAR 10
 				JMP DER_VUELVE
 			DER_VUELVE:
 				;----------
@@ -1572,10 +1584,253 @@ section .text
 ;*															SECCION DE RESOLVER ECUACION															 *
 ;*****************************************************************************************************************************************************
 	OP_RE_FUN:
+		MOV byte[ban_grado], 00h 								; ASUMO DE INICIO QUE LA FUNCION ES DE GRADO 2
+		MOV byte[a], 00h 										; INICIALIZO LAS VARIABLES
+		MOV byte[b], 00h 										; --
+		MOV byte[c], 00H 										; --
 		CALL CLS
-		IMPRIMECHAR 'R'
+		;**************************************
+		; INICIO DE OPCION DE RESOLUCION
+		;**************************************
+		MOV byte[error], 00h 									; EL ANALISIS INICIA SIN ERROR ALGUNO
+		CL_STRING entrada 										; LIMPIO LA CADENA DE ENTRADA
+		CL_STRING expo 											; LIMPIO EL EXPONENTE
+		CL_STRING vari 											; LIMPIO LA VARIABLE
+		CL_STRING coef 											; LIMPIO EL COEFICIENTE
+		PRINTSTRING resol_menu
+		IN_STRING entrada 										; PIDO LA CADENA DE ENTRADA
+		PRINTSTRING separador
+		IMPRIMECHAR 10
+		ANALIZAR entrada 										; ANALIZO LA CADENA DE ENTRADA PARA VERIFICAR QUE CUMPLA CON LAS ESPECIFICACIONES
+		CMP byte[error], 01H 									; SI ERROR CONTIENE VALOR DE 1 ENTONCES HUBO
+		JE ERROR_ANALIZAR
+		;--------------------------------------
+		; INICIO DE EVALUACION DE TERMINOS 
+		; PARA CORROBORAR QUE SEA GRADO 2
+		;--------------------------------------
+		CALL VERIFICA_GRADO
+		CMP byte[ban_grado], 000H 								; SI EL GRADO ES MENOR A 2 ENTONCES PUEDE PROCEDER DE LO CONTRARIO NO SE HARA
+		JE RESOLVE  												; CONTINUARA NORMAL
+		PRINTSTRING msg_mayor
+		JMP FIN_RE
+		;--------------------------------------
+		; RESUELVE LA ECUACION
+		;--------------------------------------
+		RESOLVE:
+		; -- OBTENGO LOS TERMINOS:
+			CALL OBTENER_TERMINO
+			IMPRIMECHAR 10
+			PRINTSTRING separador
+			IMPRIMECHAR 10
+		; -- CALCULAR EL DISCRIMINANTE
+		
+		;--------------------------------------
+		FIN_RE:
+		;**************************************
 		CALL SYSPAUSE
 		JMP MENU_PRINCIPAL
+
+	VERIFICA_GRADO:
+		PUSH BX
+		PUSH CX
+		PUSH AX
+		PUSH DX
+		;---------
+		MOV BX, funcion 										; MUEVO EL PUNTERO A LA FUNCION PARA PODER MOVERME A TRAVEZ DE ELLA
+		MOV CX, 00H 											; MUEVO EL CONTADOR PARA PODER LLEVAR EL CONTROL DE LOS TERMINOS QUE SE EVALUAN
+		MOV byte[tipo_term], 00h 								; REINICIO LA BANDERA DE EVALUACION
+		VER_LOOP:
+			CMP CL, 04H 										; LLEGO A LA POSICION 4 DE LA FUNCION?
+			JE FIN_VER 											; SI ES ASI ENTONCES TERMINA
+			EVALUA_TERM funcion, CL
+			CMP byte[tipo_term], 02h 							; ES UN TERMINO CON EXPONENTE?
+			JNE VER_CONT
+			;--------------------------------
+			; VERIFICO SI EXPONENTE NO MAYOR
+			;--------------------------------
+			GET_EXP funcion, CL
+			CMP byte[expo], '2'
+			JLE VER_CONT
+			MOV byte[ban_grado], 01h
+			;--------------------------------
+			VER_CONT:
+			INC CX
+			ADD BX, 09H
+			MOV byte[tipo_term], 00h
+			JMP VER_LOOP
+		FIN_VER:
+		;---------
+		POP DX
+		POP AX 
+		POP CX
+		POP BX
+		RET
+
+	OBTENER_TERMINO: 											; HACE USO DE VARIABLES a,b,c
+		PUSH BX
+		PUSH CX
+		PUSH DX
+		PUSH AX
+		PUSH SI
+		;-------
+		MOV byte[tipo_term], 00h 								; REINICIO LA VARIABLE DE TERMINOS
+		MOV BX, funcion 										; MUEVO EL PUNTERO HACIA LA FUNCION
+		MOV CX, 00H 											; MUEVO EL CONTADOR
+		OBT_LOOP:
+			CMP CL, 004H 										; LLEGO AL FINAL?
+			JE FIN_OBT
+			EVALUA_TERM funcion, CL 							; EVALUA LA FUNCION
+			CMP byte[tipo_term], 02h 							; SI ES DE 2?
+			JE OBT_A
+			CMP byte[tipo_term], 01h 							; SI ES DE 1?
+			JE OBT_B
+			CMP byte[tipo_term], 00h 							; SI ES DE 0?
+			JE OBT_C
+			JMP AUM
+			OBT_A:
+				CALL GET_A									; LLAMA A ETIQUETA PARA OBTENER A 
+				JMP AUM
+			OBT_B:
+				CALL GET_B 									; LLAMA A ETIQUETA PARA OBTENER B 
+				JMP AUM
+			OBT_C:
+				CALL GET_C 									; LLAMA A ETIQUETA PARA OBTENER C
+				JMP AUM
+			AUM:
+				ADD BX, 09H
+				INC CX
+				MOV byte[tipo_term], 00h
+				JMP OBT_LOOP
+		FIN_OBT:
+		;-------
+		POP SI 
+		POP AX 
+		POP DX 
+		POP CX
+		POP BX
+		RET
+
+	GET_A:
+		PUSH BX
+		PUSH CX
+		PUSH DX
+		PUSH AX
+		PUSH SI
+		;--------
+		CL_STRING coef
+		CL_STRING salida
+		CL_STRING charArr
+		GET_NUM BX, 00H
+		COUNT coef, [tam]
+		CMP byte[tam], 02h 										; COMPARO EL NUMERO DE DIGITOS QUE TIENE EL COEFICIENTE
+		JE CONVI_2
+		CONVI_1:
+			TO_NUM1 coef, byte[coef_num] 						; SI TIENE SOLO 1 ENTONCES LO CONVIERTO UTILIZANDO EL DE 1 A SU HEXA EQUIVALENTE
+			JMP CONT_A
+		CONVI_2:
+			TO_NUM2 coef, byte[coef_num] 						; SI TIENE SOLO 2 ENTONCES LO CONVIERTO UTILIZANDO EL DE 2 A SU HEXA EQUIVALENTE
+			JMP CONT_A
+		CONT_A:
+		;--------
+		IMPRIMECHAR ' '
+		IMPRIMECHAR '>'
+		IMPRIMECHAR '>'
+		IMPRIMECHAR ' '
+		IMPRIMECHAR 'A'
+		IMPRIMECHAR ':'
+		;IMPRIMECHAR ' '
+		MOV AL, byte[coef_num]									; MUEVO A AL EL RESULTADO DEL COEFICIENTE
+		MOV byte[a], AL 										; MUEVO EL RESULTADO A a 273779
+		NUM_TO_CHAR a, charArr 									; CONVIRTIENDO SOLO PARA VISUALIZAR
+		NUM_SALIDA charArr, salida
+		PRINTSTRING salida
+		IMPRIMECHAR ' '
+		POP SI
+		POP AX
+		POP DX
+		POP CX
+		POP BX 
+		RET
+
+	GET_B:
+		PUSH BX
+		PUSH CX
+		PUSH DX
+		PUSH AX
+		PUSH SI
+		;--------
+		CL_STRING coef
+		CL_STRING salida
+		CL_STRING charArr
+		GET_NUM BX, 000h 										; INDICO EN QUE POSICION NECESITO QUE TOME EL COEFICIENTE
+		COUNT coef, [tam] 										; GUARDO EL TAMANIO DEL NUMERO
+		CMP byte[tam], 02h 										; SI ES DE DOS DIGITOS?
+		JE CONV_B2
+		CONV_B1:
+			TO_NUM1 coef, byte[coef_num]						; CONVIERTO EN NUMERO HEXA EL COEFICIENTE
+			JMP CONT_B
+		CONV_B2:
+			TO_NUM2 coef, byte[coef_num]
+			JMP CONT_B
+		CONT_B:
+		;--------
+		IMPRIMECHAR '|'
+		IMPRIMECHAR ' '
+		IMPRIMECHAR 'B'
+		IMPRIMECHAR ':'
+		;IMPRIMECHAR ' '
+		MOV AL, byte[coef_num]
+		MOV byte[b], AL
+		NUM_TO_CHAR b, charArr 									; CONVIRTIENDO SOLO PARA VISUALIZAR
+		NUM_SALIDA charArr, salida
+		PRINTSTRING salida
+		IMPRIMECHAR ' '
+		POP SI
+		POP AX
+		POP DX
+		POP CX
+		POP BX 
+		RET
+
+	GET_C:
+		PUSH BX
+		PUSH CX
+		PUSH DX
+		PUSH AX
+		PUSH SI
+		;------
+		CL_STRING coef
+		CL_STRING salida
+		CL_STRING charArr
+		GET_NUM BX, 00H 										; INDICO EN QUE POSICION NECESITO EL COEFICIENTE
+		COUNT coef, [tam]										; CUENTO EL TAMANIO
+		CMP byte[tam], 02h
+		JE CONV_C2
+		CONV_C1:
+			TO_NUM1 coef, byte[coef_num]						; CONVIERTO EN NUMERO HEXA EL COEFICIENTE
+			JMP CONT_C
+		CONV_C2:
+			TO_NUM2 coef, byte[coef_num]
+			JMP CONT_C
+		CONT_C:
+		;------
+		IMPRIMECHAR '|'
+		IMPRIMECHAR ' '
+		IMPRIMECHAR 'C'
+		IMPRIMECHAR ':'
+		;IMPRIMECHAR ' '
+		MOV AL, byte[coef_num]
+		MOV byte[c], AL
+		NUM_TO_CHAR c, charArr 									; CONVIRTIENDO SOLO PARA VISUALIZAR
+		NUM_SALIDA charArr, salida
+		PRINTSTRING salida
+		POP SI
+		POP AX
+		POP DX
+		POP CX
+		POP BX
+		RET
+
 
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE REPORTES															             *
@@ -1649,7 +1904,6 @@ section .text
 		POP AX
 		POP BX
 		RET
-
 
 	OBT_NUM:
 		CMP byte[BX], '$'					; ES SIGNO DE DOLAR?
