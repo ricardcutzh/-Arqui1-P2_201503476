@@ -4,7 +4,7 @@
 section .bss
 memhandle  resb 2
 pathHandle resb 2
-
+rep_e_hand resb 2
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE DATA																			 *
 ;*****************************************************************************************************************************************************
@@ -16,11 +16,13 @@ section .data
 	PUSH AX
 	PUSH CX
 	PUSH BX
+	PUSH DX
 
 	MOV DX, %1		; COLOCO EL MENSAJE A IMPRIMIR
 	MOV AH, 9 	 	; MUEVO 9 PARA LA IMPRIMIR EN PANTALLA
 	INT 21H			; LLAMADA AL A INTERRUPCION 21H
 
+	POP DX
 	POP BX
 	POP CX
 	POP AX
@@ -65,11 +67,25 @@ section .data
 	MOV %3, AX 					; PONGO EL NUMERO DE CARACTERES LEIDOS
 %endmacro
 %macro write_in_file 3 			; P1: HANDLE, P2: # BYTES A ESCRIBIR, P3: BUFFER
+	PUSH AX
+	PUSH CX
+	PUSH BX
+	PUSH DX
+	XOR BX, BX
+	XOR CX, CX
+	XOR AX, AX
+	XOR DX, DX
+
 	MOV AH, 40H 				; FUNCION PARA ESCRITURA EN UN ARCHIVO					
 	MOV BX, %1 					; COLOCO EL HANDLER EN BX
 	MOV CX, %2 					; NUMERO DE BYTES A ESCRIBIR
 	MOV DX, %3 					; EL BUFFER DE DONDE SE TOMARAN LOS CARACTERES
 	INT 21H 					; LLAMADA A LA INTERRUPCION 21
+
+	POP DX 
+	POP BX
+	POP CX
+	POP AX
 %endmacro
 %macro create_file 2 			; P1: NOMBRE DEL ARCHIVO, P2: LUGAR DONDE SE VA A GUARDAR EL HANDLE DEL ARCHIVO
 	MOV AH, 3CH 				; FUNCION PARA CREAR UN NUEVO ARCHIVO
@@ -136,6 +152,21 @@ section .data
 	MOV BX, %1
 	CALL COUNT_CHAR
 	MOV %2, CL
+	POP DX
+	POP AX
+	POP CX
+	POP BX
+%endmacro
+%macro COUNT2 2
+	PUSH BX
+	PUSH CX
+	PUSH AX
+	PUSH DX
+	XOR BX, BX
+	MOV BX, %1
+	CALL COUNT_CHAR
+	XOR CH, CH
+	MOV %2, CX
 	POP DX
 	POP AX
 	POP CX
@@ -404,6 +435,7 @@ igualdad            db  0 										; BANDERA QUE VA A USARSE PARA SABER SI DOS 
 mensal              db 10,"********** SALIENDO ..... **********",10,13,"$"
 correcto 			db "********* FUNCION INGRESADA Y GUARDADA CORRECTAMENTE ********$"
 memoria 			dw "mt.txt$"
+reporte_equ 		dw "re.txt$"
 ;--------------------------------------
 ; MENU PRINCIPAL
 ;--------------------------------------
@@ -552,6 +584,26 @@ pow_resul 			dw 00h
 aux_resul1 			dw 00h
 aux_resul2 			dw 00h
 aux_resul3 			dw 00h
+;-----------------------------------------------------------------------------------------------------
+msg_sol 			db " >> solucion : $"
+;-----------------------------------------------------------------------------------------------------
+menu_rep			db "*********************************************************",10,13,
+					db "*                 MENU DE REPORTES                      *",10,13,
+					db "*********************************************************",10,13,
+					db "*  1) FUNCIONES EN SISTEMA                              *",10,13,
+					db "*  2) ECUACIONES INGRESADAS                             *",10,13,
+					db "*  3) SALIR A MENU PRINCIPAL                            *",10,13,
+					db "*********************************************************",10,13,
+					db "* >> $"
+;-----------------------------------------------------------------------------------------------------
+encabezado_rep  	db "                        REPORTE"
+rep_eq_fun 			db "| Funcion: "
+rep_eq_sol 			db " | solucion: "
+len 				db 00h
+;-----------------------------------------------------------------------------------------------------
+mes_rep 			db "*********************************************************",10,13,
+					db "*                 REPORTE GENERADO                      *",10,13,
+					db "*********************************************************",10,13,'$'
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE TEXT																			 *
 ;*****************************************************************************************************************************************************
@@ -567,6 +619,7 @@ section .text
 		;PRINTSTRING salida
 		;CALL SYSPAUSE
 		;CALL EXIT
+		CALL REP_EQ
 		JMP MENU_PRINCIPAL
 
 
@@ -1637,6 +1690,7 @@ section .text
 ;*															SECCION DE RESOLVER ECUACION															 *
 ;*****************************************************************************************************************************************************
 	OP_RE_FUN:
+		CALL LEE_EQ 											; ABRO EL ARCHIVO
 		MOV byte[ban_grado], 00h 								; ASUMO DE INICIO QUE LA FUNCION ES DE GRADO 2
 		MOV byte[a], 00h 										; INICIALIZO LAS VARIABLES
 		MOV byte[b], 00h 										; --
@@ -1658,6 +1712,18 @@ section .text
 		CMP byte[error], 01H 									; SI ERROR CONTIENE VALOR DE 1 ENTONCES HUBO
 		JE ERROR_ANALIZAR
 		;--------------------------------------
+		; ESCRIBO LA FUNCION
+		;--------------------------------------
+		write_in_file [rep_e_hand], 3AH, separador
+		MOV byte[charAux], 10
+		write_in_file [rep_e_hand], 01h, charAux 
+		write_in_file [rep_e_hand], 0BH, rep_eq_fun				; AQUI ESCRIBO "| FUNCION: "
+		MOV word[tam], 00h
+		COUNT entrada, [tam]
+		write_in_file [rep_e_hand], [tam], entrada
+		MOV byte[charAux], ' '
+		write_in_file [rep_e_hand], 0DH, rep_eq_sol
+		;--------------------------------------
 		; INICIO DE EVALUACION DE TERMINOS 
 		; PARA CORROBORAR QUE SEA GRADO 2
 		;--------------------------------------
@@ -1676,10 +1742,17 @@ section .text
 			PRINTSTRING separador
 			IMPRIMECHAR 10
 		; -- CALCULAR EL DISCRIMINANTE
-			CALL DISCRIMINANTE
+			;CALL DISCRIMINANTE
+		; -- CALCULO DE PRIMER GRADO
+			PRINTSTRING msg_sol
+			CALL P_GRADO_RES
+			IMPRIMECHAR 10
 		;--------------------------------------
 		FIN_RE:
 		;**************************************
+		MOV byte[charAux], 10
+		write_in_file [rep_e_hand], 01h, charAux 
+		close_file [rep_e_hand]
 		CALL SYSPAUSE
 		JMP MENU_PRINCIPAL
 
@@ -1810,9 +1883,9 @@ section .text
 		NUM_SALIDA charArr, salida
 		PRINTSTRING salida
 		IMPRIMECHAR ' '
-		CMP byte[s_a], 001h 	 								; ES NEGATIV0?
-		JNE FIN_A 												; SI NO LO ES.. ME LO SALTO
-		A_NEGATIVO a 											; PASO A NEGATIVO
+		;CMP byte[s_a], 001h 	 								; ES NEGATIV0?
+		;JNE FIN_A 												; SI NO LO ES.. ME LO SALTO
+		;A_NEGATIVO a 											; PASO A NEGATIVO
 		FIN_A:
 		POP SI
 		POP AX
@@ -1866,9 +1939,9 @@ section .text
 		NUM_SALIDA charArr, salida
 		PRINTSTRING salida
 		IMPRIMECHAR ' '
-		CMP byte[s_b], 001h 	 								; ES NEGATIV0?
-		JNE FIN_B 												; SI NO LO ES.. ME LO SALTO
-		A_NEGATIVO b 											; PASO A NEGATIVO
+		;CMP byte[s_b], 001h 	 								; ES NEGATIV0?
+		;JNE FIN_B 												; SI NO LO ES.. ME LO SALTO
+		;A_NEGATIVO b 											; PASO A NEGATIVO
 		FIN_B:
 		POP SI
 		POP AX
@@ -1921,9 +1994,9 @@ section .text
 		NUM_TO_CHAR c, charArr 									; CONVIRTIENDO SOLO PARA VISUALIZAR
 		NUM_SALIDA charArr, salida
 		PRINTSTRING salida
-		CMP byte[s_c], 001h 	 								; ES NEGATIV0?
-		JNE FIN_C 												; SI NO LO ES.. ME LO SALTO
-		A_NEGATIVO c 											; PASO A NEGATIVO
+		;CMP byte[s_c], 001h 	 								; ES NEGATIV0?
+		;JNE FIN_C 												; SI NO LO ES.. ME LO SALTO
+		;A_NEGATIVO c 											; PASO A NEGATIVO
 		FIN_C:
 		POP SI
 		POP AX
@@ -1954,15 +2027,161 @@ section .text
 		POP CX
 		POP BX
 		RET 
+
+	P_GRADO_RES:
+		PUSH BX
+		PUSH CX
+		PUSH DX
+		PUSH AX
+		;----------------
+		; VALIDO SIGNOS
+		CALL VAL_SIGNO
+		CL_STRING salida
+		CL_STRING charArr
+		;----------------
+		MOV word[aux_resul1], 00h 								; EL RESULTADO SERA 0 
+		CMP word[c], 00h 										; ES C 0?
+		JE F_P_GR
+		;----------------
+		; SI C NO ES 0:
+		;----------------
+		;A_NEGATIVO c
+		MOV AX, word[c]											; MOVER AX LO QUE ESTA EN C
+		MOV CX, word[b]											; MUEVO A CX LO QUE ESTA EN B
+		DIV CL 													; DIVIDO AX/DX
+		XOR DH, DH
+		MOV DL, AL  											; MUEVO EL COCIENTE A DL
+		MOV word[aux_resul1], DX 								; MUEVO AL RESULTADO
+		MOV byte[entero], AH 									; MUEVO EL REMINDER
+		;A_NEGATIVO aux_resul1s
+		NUM_TO_CHAR aux_resul1, charArr 								; CONVIERTO EL NUMERO A ARREGLO
+		NUM_SALIDA charArr, salida 								; CONVIERTO EL ARREGLO EN STRING DE SALIDA
+		PRINTSTRING salida
+		MOV word[len], 00h
+		COUNT2 salida, word[len]
+		write_in_file [rep_e_hand], word[len] , salida
+		;----------------
+		; FLOTANTE:
+		CMP byte[entero], 00h
+		JE F_P_GR
+		XOR AX, AX
+		CL_STRING salida
+		CL_STRING charArr
+		IMPRIMECHAR '.'
+		MOV byte[charAux], '.'
+		write_in_file [rep_e_hand], 01h, charAux 
+		MOV word[aux_resul1], 00h
+		MOV AL, byte[entero]
+		MOV DL, 0AH
+		MUL DL
+		MOV DX, word[b]
+		DIV DL
+		XOR AH, AH
+		MOV word[aux_resul1], AX
+		NUM_TO_CHAR aux_resul1, charArr 								; CONVIERTO EL NUMERO A ARREGLO
+		NUM_SALIDA charArr, salida 								; CONVIERTO EL ARREGLO EN STRING DE SALIDA
+		PRINTSTRING salida
+		MOV word[len], 00h
+		COUNT2 salida, word[len]
+		write_in_file [rep_e_hand], word[len] , salida
+		;----------------
+		F_P_GR:
+		POP AX
+		POP DX
+		POP CX
+		POP BX
+		RET
+
+	VAL_SIGNO:
+		CMP byte[s_b], 01h
+		JE VAL_C1
+		JMP VAL_C2
+		VAL_C1:
+		CMP byte[s_c], 00h
+		JE VAL_MAS
+		JMP VAL_MENOS
+		VAL_C2:
+		CMP byte[s_c], 00H
+		JE VAL_MENOS
+		JMP VAL_MAS
+		VAL_MENOS:
+		IMPRIMECHAR '-'
+		MOV byte[charAux], '-'
+		write_in_file [rep_e_hand], 01h, charAux 
+		JMP VAL_FIN
+		VAL_MAS:
+		IMPRIMECHAR '+'
+		MOV byte[charAux], '+'
+		write_in_file [rep_e_hand], 01h, charAux 
+		JMP VAL_FIN
+		VAL_FIN:
+		RET
+
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE REPORTES															             *
 ;*****************************************************************************************************************************************************
+
 	OP_REP_FUN:
 		CALL CLS
-		IMPRIMECHAR 'R'
-		IMPRIMECHAR 'P'
+		PRINTSTRING menu_rep
+		CALL GETCHAR
+		CMP AL, '1'												; COMPARO SI ESCOGIO LA OPCION 1
+	    JE REP1 												; SALTA A REPORTE 1
+		CMP AL, '2'												; COMPARO SI ESCOGIO LA OPCION 2
+		JE REP2 												; SALTA A REPORTE 2
+		CMP AL, '3'												; SI ES LA TERCERA OPCION
+		JE MENU_PRINCIPAL
+		JMP OP_REP_FUN
+
+
+	REP1:
+		CALL CLS
+		PRINTSTRING mes_rep
 		CALL SYSPAUSE
-		JMP MENU_PRINCIPAL
+		JMP OP_REP_FUN
+
+	REP2:
+		CALL CLS
+		PRINTSTRING mes_rep
+		CALL SYSPAUSE
+		JMP OP_REP_FUN
+
+	REP_EQ:
+		;------------------------------------
+		; CREAR EL ARCHIVO
+		;------------------------------------
+		create_file reporte_equ, [rep_e_hand]
+		;------------------------------------
+		; ESCRIBIR EL ENCAMEZADO DEL REPORTE
+		;------------------------------------
+		write_in_file [rep_e_hand], 1FH, encabezado_rep
+		MOV byte[charAux], ' '
+		write_in_file [rep_e_hand], 01h, charAux 
+		MOV byte[charAux], '2'
+		write_in_file [rep_e_hand], 01h, charAux 
+		MOV byte[charAux], 10
+		write_in_file [rep_e_hand], 01h, charAux 
+		close_file [rep_e_hand]
+		RET
+
+	LEE_EQ:
+		PUSH AX
+		PUSH CX
+		PUSH BX
+		PUSH DX 
+		;---------------------------------------
+		; LEER EL ARCHIVO PARA EMPEZAR A ESCIBIR
+		;---------------------------------------
+		CL_STRING contenido
+		open_file reporte_equ, [rep_e_hand]
+		read_file [rep_e_hand], contenido, [tam]
+		CL_STRING contenido
+		;---------------------------------------
+		POP DX
+		POP BX
+		POP CX
+		POP AX
+		RET
 
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE SUBRUTINAS																	 *
@@ -1996,7 +2215,6 @@ section .text
 		JE ES_EXP
 		;-----------------
 		JMP ES_VAR
-
 
 	ES_EXP:
 		MOV byte[tipo_term], 02h
