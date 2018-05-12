@@ -191,6 +191,33 @@ section .data
 	POP CX
 	POP BX
 %endmacro
+%macro ANALIZER 1 				; P1: LA DIRECCION DE MEMORIA DE LA CADENA A ANALIZAR
+	PUSH BX
+	PUSH CX
+	PUSH DX
+	PUSH AX
+	PUSH SI
+	;------------------------
+	CALL LIMPIAR_FUN
+	XOR DI, DI
+	MOV BX, %1
+	MOV CX, 00H
+	MOV SI, funcion
+	MOV DI, funcion
+	; AQUI METO EL PRIMER SIGNO
+	MOV AL, byte[BX]
+	MOV byte[SI], AL
+	INC SI
+	INC BX
+	; AQUI LLAMO A LA FUNCION QUE ANALIZA
+	CALL ANALIZAR2
+	;------------------------
+	POP SI
+	POP AX
+	POP DX
+	POP CX
+	POP BX
+%endmacro
 %macro EVALUA_TERM 2 			; P1: CADENA (MISMO FORMATO QUE FUNCION), P2: INDICE DE CADENA
 	PUSH BX
 	PUSH AX
@@ -428,6 +455,102 @@ section .data
 	MOV word[%1], AX 			; MUEVO AX A LA VRIABLE NUEVAMENTE		
 	POP AX 
 %endmacro
+%macro DRAW_CHAR 4 								; P1: CURSOR ROW, P2: CURSOR COLUM, P3:CHAR, P4:COLOR
+	PUSH BX
+	PUSH AX
+	PUSH DX
+	PUSH CX
+	;--------------------------------------------
+	MOV AH, 02H 								; FUNCION A LLAMAR PARA POSICIONAR EL CURSOR
+	MOV BH, 00H 								; PAGINA
+	MOV DH, %1 									; POSICIONO FILA
+	MOV DL, %2 									; POSICIONO COLUMNA
+	INT 10H
+	; ESCRIBIENDO EL CHAR 
+	MOV AH, 09H 								; FUNCION PARA ESCRIBIR EL CARACTER
+	MOV AL, %3 									; CARACTER A ESCRIBIR
+	MOV BH, 00H 								; PAGINA A POSCICIONAR
+	MOV BL, %4 									; COLOR 
+	MOV CX, 01H 								; NUMERO DE CARACTER A ESCRIBIR
+	INT 10H
+	;-------------------------------------------
+	POP CX
+	POP DX
+	POP AX
+	POP BX
+%endmacro
+%macro DRAW_PIX 3 				; P1: ROW, P2: COLUMN, P3: COLOR 
+	PUSH AX
+	PUSH BX
+	PUSH CX
+	PUSH DX
+	;------
+	MOV AH, 00CH
+	MOV AL, %3
+	MOV BH, 00H
+	MOV CX, %2
+	MOV DX, %1
+	INT 10H
+	;------
+	POP DX
+	POP CX
+	POP BX
+	POP AX
+%endmacro
+%macro DRAW_H_LINE 4 							; P1: ROW, P2: COLUM, P3: MAX, P4: COLOR 
+	PUSH BX
+	PUSH SI
+	PUSH CX
+	PUSH DX
+	PUSH AX 
+	MOV word[row], %1
+	MOV word[colum], %2
+	MOV word[max], %3
+	MOV word[color], %4
+	MOV CX, word[colum]
+	MOV DX, word[row]
+	CALL H_LINE
+	POP AX
+	POP DX
+	POP CX
+	POP SI
+	POP BX
+%endmacro
+%macro DRAW_V_LINE 4 							; P1: ROW, P2: COLUM, P3: MAX, P4: COLOR
+	PUSH BX
+	PUSH SI
+	PUSH CX
+	PUSH DX
+	PUSH AX 
+	MOV word[row], %1
+	MOV word[colum], %2
+	MOV word[max], %3
+	MOV word[color], %4
+	MOV CX, word[colum]
+	MOV DX, word[row]
+	CALL V_LINE
+	POP AX
+	POP DX
+	POP CX
+	POP SI
+	POP BX
+%endmacro
+%macro READ_FUN 1 				; P1: NUMERO DE FUNCION QUE DESEO LEER, COMIENZA CON LA 1 -- 15, DEVUELVE EN auxiliar
+	PUSH BX
+	PUSH CX
+	PUSH SI
+	PUSH AX
+	PUSH DX
+	;------
+	MOV byte[indice], %1
+	CALL SEARCH_FUN
+	;------
+	POP DX
+	POP AX
+	POP SI
+	POP CX
+	POP BX
+%endmacro
 ;=====================================================================================================================================================
 pausemens           db 10,"** PRESS ANY KEY TO CONTINUE.... ***$"
 errorMSG 			db 10,"** ERROR PARA ABRIR UN ARCHIVO *****$"
@@ -436,6 +559,8 @@ mensal              db 10,"********** SALIENDO ..... **********",10,13,"$"
 correcto 			db "********* FUNCION INGRESADA Y GUARDADA CORRECTAMENTE ********$"
 memoria 			dw "mt.txt$"
 reporte_equ 		dw "re.txt$"
+
+es_imp 				db 00h
 ;--------------------------------------
 ; MENU PRINCIPAL
 ;--------------------------------------
@@ -551,6 +676,7 @@ contenido2 times 255 db '$'
 auxiliar times 50   db '$'
 
 contador 			db 00h
+indice 				db 00h
 ;*****************************************************************************************************
 
 ;*****************************************************************************************************
@@ -604,6 +730,19 @@ len 				db 00h
 mes_rep 			db "*********************************************************",10,13,
 					db "*                 REPORTE GENERADO                      *",10,13,
 					db "*********************************************************",10,13,'$'
+;=============================
+; VARIABLES GRAFICO
+;==============================
+row  				dw 00H
+colum 				dw 00H
+max 				dw 00H
+color 				db 00H
+;--------------------------
+prueba 				db "+2.5x^2+4x-8$$$$$$$$$$"
+pruebas times 50    db "$"
+;---------------------------
+xcord 				dw 00H
+ycord 				dw 00H
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE TEXT																			 *
 ;*****************************************************************************************************************************************************
@@ -613,7 +752,7 @@ section .text
 
 	MAIN:
 		ORG 100H
-		;POW 05H, 02H, word[pow_resul]
+		;POW 03H, 02H, word[pow_resul]
 		;NUM_TO_CHAR pow_resul, charArr 								; CONVIERTO EL NUMERO A ARREGLO
 		;NUM_SALIDA charArr, salida 								; CONVIERTO EL ARREGLO EN STRING DE SALIDA
 		;PRINTSTRING salida
@@ -621,7 +760,6 @@ section .text
 		;CALL EXIT
 		CALL REP_EQ
 		JMP MENU_PRINCIPAL
-
 
 	MENU_PRINCIPAL:
 		CALL LIMPIAR_FUN
@@ -1614,7 +1752,7 @@ section .text
 			CMP byte[BX], ';'									; ES UN PUNTO Y COMA?
 			JNE JMP_COUNT
 			INC_COUNT:
-			INC CX
+			INC CL
 			JMP_COUNT:
 			INC BX
 			JMP LOOP_COUNT 
@@ -1682,9 +1820,595 @@ section .text
 ;*****************************************************************************************************************************************************
 	OP_GR_FUN:
 		CALL CLS
-		IMPRIMECHAR 'G'
-		CALL SYSPAUSE
+		MOV byte[contador], 00h
+		CL_STRING contenido 									; LEO EL CONTENIDO DEL ARCHIVO
+		CALL READ_MEMORY 										; LEO LA MEMORIA DE LA CALCULADORA
+		CALL COUNT_FUN 											; CUENTO LAS FUNCIONES
+		;MOV CL, byte[contador]
+		;ADD CL, 30H
+		;READ_FUN 01H
+		;ANALIZER auxiliar
+		;CALL IMPRIME_FUNCION
+		;IMPRIMECHAR 10
+		;CALL EVALUA_FUNCION
+		;CALL SYSPAUSE
+		;IMPRIMECHAR CL
+		;CALL SYSPAUSE
+		;JMP MENU_PRINCIPAL 
+		;----------------
+		CALL GRAPHIC_MODE 										; LLAMO AL MODO GRAFICO
+		CALL DIBUJA_MARCO 										; DIBUJO EL MARCO DE LA GRAFICADORA
+		CALL DIBUJA_EJES
+		;----------------
+		;CALL GRAPHIC_PAUSE 										; PAUSA PARA PODER VER QUE SE DIBUJE TODO
+		JMP MUEVE_FELCHAS
 		JMP MENU_PRINCIPAL
+
+	DIBUJA_MARCO:
+		;DRAW_H_LINE 14h, 0AH, 026DH, 07H  								; EMPIEZA EN Y = 20, X = 10
+		;DRAW_V_LINE 14h, 0AH, 141H, 07H       							; EMPIEZA EN Y = 20, X = 10
+		;DRAW_H_LINE 154H, 0AH, 026DH, 07H 								; EMPIEZA EN Y = 340, X = 10 
+		;DRAW_V_LINE 14H, 276H, 141H, 07H 								; EMPIEZA EN Y = 20, X = 630
+		DRAW_CHAR 00H, 02H, 'F', 07H
+		DRAW_CHAR 00H, 03H, '(', 07H 
+		DRAW_CHAR 00H, 04H, 'x', 07H
+		DRAW_CHAR 00H, 05H, ')', 07H
+		DRAW_CHAR 00H, 06H, '=', 07H
+		RET
+
+	DIBUJA_EJES:
+		; CENTRO X = 140H, Y = AFH
+		DRAW_H_LINE 0AFh, 00H, 280H, 03H
+		DRAW_V_LINE 00H, 140H, 15EH, 03H
+		;DRAW_PIX 0AFH, 133h, 04h
+		RET
+
+	MUEVE_FELCHAS:
+		XOR CX, CX
+		MOV CL, 000H
+		LOOP_FLE:
+			MOV AH, 01H
+			INT 16H
+			JNZ UPDATE_GRAPH
+			JMP LOOP_FLE
+		END_FLE:
+		JMP MENU_PRINCIPAL
+
+	UPDATE_GRAPH:
+		MOV AH, 00
+		INT 16H
+
+		CMP AH, 4DH
+		JE MOVE_FOWARD
+
+		CMP AH, 4BH
+		JE MOVE_BACKWARDS
+
+		CMP AH, 01H
+		JE MENU_PRINCIPAL
+
+		JMP LOOP_FLE
+
+	MOVE_FOWARD:
+		INC CL													; INCREMENTO CL 
+		CMP CL, byte[contador] 									; LLEGO AL TOPE DEL CONTADOR?
+		JG END_FLE 												; SI ES ASI TERMINA
+		;************************
+		; AQUI DEBERIA DE PINTAR 
+		;************************
+		CALL REPAINT
+		READ_FUN CL
+		ANALIZER auxiliar
+		CALL EVALUA_FUNCION
+		CALL EVALUA_FUNCION2
+		CALL ESCRIBE_AUX
+		;************************************
+		; AQUI DEBERIA DE EVALUAR LA FUNCION
+		;************************************
+
+		;************************
+		JMP LOOP_FLE
+
+	MOVE_BACKWARDS:
+		DEC CL 													; INCREMENTO CL
+		CMP CL, 01h 											; YA LLEGO A 0?
+		JL END_FLE 												; SI ES ASI ENTONCES TERMINA 
+		;************************
+		; AQUI DEBERIA DE PINTAR
+		;************************
+		CALL REPAINT
+		PUSH AX
+		XOR AX, AX
+		MOV AL, CL
+		ADD AL, 30H
+		DRAW_CHAR 01H, 08H, AL, 07H
+		POP AX
+		;************************	
+		JMP LOOP_FLE
+
+	REPAINT:
+		CALL GRAPHIC_MODE
+		CALL DIBUJA_MARCO
+		CALL DIBUJA_EJES
+		RET
+
+	SEARCH_FUN:
+		MOV BX, contenido
+		MOV CL, 00H
+		LOOP_S:
+			CMP CL, byte[indice] 								; LLEGUE AL INDICE?
+			JE FIN_S
+			CL_STRING auxiliar
+			MOV SI, auxiliar 									; MUEVO EL PUNTERO AL auxiliar PARA PODER LLENAR LA CADENA
+			IN_S_LOOP:
+				CMP byte[BX], '$' 									; TERMINO LA CADENA?
+				JE FIN_S
+				CMP byte[BX], ';'
+				JE IN_S_FIN
+				MOV AL, byte[BX]									; COPIO EL CARACTER
+				MOV byte[SI], AL 									; MUEVO EL CARACTER AL ALUXILIAR
+				INC SI
+				INC BX
+				JMP IN_S_LOOP
+			IN_S_FIN:
+			;-------------
+			INC BX
+			INC CL
+			JMP LOOP_S
+		FIN_S:
+		RET
+
+	ESCRIBE_AUX:
+		PUSH BX
+		PUSH SI
+		PUSH CX
+		;------
+		XOR CX, CX 
+		MOV BX, auxiliar
+		MOV CL, 07h
+		L_E:
+			CMP byte[BX], '$'
+			JE F_L_E
+			MOV AL, byte[BX]
+			DRAW_CHAR 00H, CL, AL, 07H
+			INC CL
+			INC BX
+			JMP L_E
+		F_L_E:
+		;------
+		POP CX
+		POP SI
+		POP BX
+		RET
+
+	ANALIZAR2:
+		AN_LOOP:
+			CMP byte[BX], '$' 											; ES EL FINAL DE CADENA?
+			JE FIN_AN
+			CMP byte[BX], '-' 											; ES MENOS?
+			JE AUM_AN
+			CMP byte[BX], '+'											; ES MAS?
+			JE AUM_AN
+			;--------------
+			; GUARDO CARAC
+			;--------------
+			MOV AL, byte[BX]
+			MOV byte[SI], AL
+			INC SI
+			INC BX
+			JMP AN_LOOP
+			AUM_AN:
+				ADD DI, 09H
+				MOV SI, DI
+				MOV AL, byte[BX]
+				MOV byte[SI], AL
+				INC SI
+				INC BX
+				JMP AN_LOOP
+		FIN_AN:
+		RET
+
+	EVALUA_FUNCION:
+		IMPRIMECHAR 10
+		PUSH BX
+		PUSH SI 
+		PUSH DI
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		;---------S		
+		CL_STRING pruebas
+		MOV SI, 00h
+		EVL_LOOP:
+			CMP SI, 06H
+			JE FIN_EVL
+			;***********************
+			; RESETEO RESP
+			MOV word[aux_resul2], 00h
+			MOV word[aux_resul3], 00h
+			; EVALUO:
+			CALL EVL_AUX
+			; X = SI, Y = RESP
+			;***********************
+			; GRAGICO
+			CL_STRING pruebas
+			CL_STRING charArr
+			MOV word[ycord], 00h
+			MOV word[xcord], 00h
+			MOV AX, word[aux_resul2] ; COORDENADA EN Y, EN SI TENGO X
+			MOV word[ycord], AX
+			MOV word[xcord], SI
+			;-------------
+			;-------------
+			; X * 32
+			;-------------
+			XOR AX, AX
+			MOV AX, word[xcord]
+			MOV CL, 0AH
+			MUL CL
+			MOV word[xcord], AX
+			XOR AX, AX
+			;--------------
+			MOV DX, 0AFH
+
+			MOV AX, word[aux_resul2]
+			TEST AX, 0x80
+			JZ RESTA
+
+			NEG word[aux_resul2]
+			ADD DX, word[aux_resul2]
+			
+			JMP GUARDAY1
+
+			RESTA:
+			SUB DX, word[aux_resul2]
+			
+
+			GUARDAY1:
+			MOV word[ycord], DX
+
+
+			MOV AX, 140H
+			ADD AX, word[xcord]
+			MOV word[xcord], AX
+			CALL ESCRIBE_SAL
+			;-------------
+			DRAW_PIX word[ycord], word[xcord], 07h
+
+			;----------------------
+			PR:
+			INC SI
+			JMP EVL_LOOP
+		FIN_EVL:
+		;---------
+		POP DX
+		POP CX
+		POP AX
+		POP DI
+		POP SI
+		POP BX
+		RET
+
+	EVALUA_FUNCION2:
+		PUSH BX
+		PUSH SI 
+		PUSH DI
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		;---------S
+		MOV byte[es_imp], 00h		
+		CL_STRING pruebas
+		MOV SI, -1h
+		EVL_LOOP2:
+			CMP SI, -06H
+			JE FIN_EVL2
+			;***********************
+			; RESETEO RESP
+			MOV word[aux_resul2], 00h
+			MOV word[aux_resul3], 00h
+			; EVALUO:
+			CALL EVL_AUX
+			; X = SI, Y = RESP
+			;***********************
+			; GRAGICO
+			CL_STRING pruebas
+			CL_STRING charArr
+			MOV word[ycord], 00h
+			MOV word[xcord], 00h
+			MOV AX, word[aux_resul2] ; COORDENADA EN Y, EN SI TENGO X
+			MOV word[ycord], AX
+			MOV word[xcord], SI
+			;-----------------------
+
+			;-------------
+			; X * 32
+			;-------------
+			ELEV:
+			XOR AX, AX
+			MOV AX, word[xcord]
+			MOV CL, 0AH
+			MUL CL
+			MOV word[xcord], AX
+			XOR AX, AX
+			;--------------
+			MOV DX, 0ABH
+
+			MOV AX, word[aux_resul2]
+			TEST AX, 0x80
+			JZ REST2
+
+
+			; si el numero es negativo
+			NEG word[aux_resul2]
+
+			MOV AX, word[aux_resul2]
+			XOR AH, AH
+			MOV word[aux_resul2], AX
+			
+			ADD DX, word[aux_resul2]
+			
+			JMP GUARDAY2
+
+			REST2:
+			; si el numero es positivo
+			MOV AX, word[aux_resul2]
+			XOR AH, AH
+			MOV word[aux_resul2], AX
+
+			SUB DX, word[aux_resul2]
+
+			GUARDAY2:
+			MOV word[ycord], DX
+
+
+			MOV AX, 140H
+			ADD AX, word[xcord]
+			MOV word[xcord], AX
+
+			;CALL ESCRIBE_SAL
+
+			DRAW_PIX word[ycord], word[xcord], 07h
+
+
+
+			
+			IMPRIMECHAR 10
+			;-----------------------
+			DEC SI
+			JMP EVL_LOOP2
+		FIN_EVL2:
+		;---------
+		POP DX
+		POP CX
+		POP AX
+		POP DI
+		POP SI
+		POP BX
+		RET
+
+	EVL_AUX:
+		PUSH SI 
+		MOV BX, funcion 		; GUARDO LA POSICION QUE LLEVA FUNCION
+		MOV DI, funcion 		; LA COPIA DE LA POSICION
+		MOV byte[tipo_term], 04h 	; EL TIPO LO RESETEO
+		MOV CL, 00H
+		AUX_L:
+			CMP CL, 004h 			; YA LLEGO A LA 4TA POSICION?
+			JE FIN_AUX_L
+			EVALUA_TERM funcion, CL  	 ; EVALUA EL TERMINO EN LA POSICION DE CL
+			CMP byte[tipo_term], 02h ; ES DE TIPO DE EXPONENTE
+			JE EVALUA2
+			CMP byte[tipo_term], 01h ; ES EL TIPO QUE NO TIENE EXPONENTE
+			JE EVALUA1
+			CMP byte[tipo_term], 00h ; EL QUE TIENE UNA CONSTANTE
+			JE EVALUA0
+			AUX_L_CONT:
+			MOV byte[tipo_term], 04h
+			ADD DI, 009h
+			MOV BX, DI
+			INC CL
+			JMP AUX_L
+		FIN_AUX_L:
+		POP SI
+		RET
+
+	EVALUA2:
+		PUSH BX
+		PUSH SI 
+		PUSH DI
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		;---------
+		MOV word[aux_resul3], 00h
+		CMP byte[BX], '$'
+		JE CONTINUA2
+		;--------
+		MOV byte[coef_num], 00h
+		MOV byte[tam], 00h
+		CL_STRING coef
+		CL_STRING expo
+		GET_NUM BX, 00H
+		GET_EXP BX, 00H
+		;-------------------
+		; CONVIRTIENDO EXPO
+		;MOV AL, byte[expo]
+		;SUB AL, 030H
+		;-------------------
+		; CONVIERTO EL NUMERO
+		COUNT coef, [tam]
+		CMP byte[tam], 01h
+		JE CONVIERTE1
+		JMP CONVIERTE2
+		CONVIERTE1:
+			TO_NUM1 coef, byte[coef_num]
+			JMP CONTINUA
+		CONVIERTE2:
+			TO_NUM2 coef, byte[coef_num]
+			JMP CONTINUA
+		CONTINUA:
+		;---------
+		; ELEVO
+		;---------
+		MOV AL, byte[expo]
+		SUB AL, 030H
+		MOV byte[expo], AL ;<---- AQUI EL PROBLEMA
+		POW SI, byte[expo], word[aux_resul3]
+		
+		
+		; MULTIPLICO
+		;-----------------------
+		XOR AX, AX 
+		MOV AX, word[aux_resul3]
+		MOV DL, byte[coef_num]
+		MUL DL
+		CMP byte[BX], '-'
+		JE EV2_REST
+		;ADD word[aux_resul2], AX
+		JMP CONTINUA2
+		;-----------------------
+		EV2_REST:
+			;SUB word[aux_resul2], AX
+			NEG AX ; * *-1
+		CONTINUA2:
+		ADD word[aux_resul2], AX  ; SIEMPRE SUMO
+		POP DX
+		POP CX
+		POP AX
+		POP DI
+		POP SI
+		POP BX
+		JMP AUX_L_CONT
+
+	EVALUA1:
+		PUSH BX
+		PUSH SI 
+		PUSH DI
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		;-----------------------
+		CMP byte[BX], '$'
+		JE EV1_CONTINUA2
+		;-----------------------
+		MOV byte[coef_num], 00h
+		MOV byte[tam], 00h
+		CL_STRING coef
+		GET_NUM BX, 00H
+		;-----------------------
+		; CONVIERTO EL NUMERO
+		;-----------------------
+		COUNT coef, [tam]
+		CMP byte[tam], 01h
+		JE E1_CONV1
+		JMP E1_CONV2
+		E1_CONV1:
+			TO_NUM1 coef, byte[coef_num]
+			JMP E1_CONTINUA
+		E1_CONV2:
+			TO_NUM2 coef, byte[coef_num]
+			JMP E1_CONTINUA
+		E1_CONTINUA:
+		;-----------------------
+		; MULTIPLICO
+		;----------------------
+		XOR AX, AX
+		MOV AX, SI
+		MOV DL, byte[coef_num]
+		MUL DL
+		CMP byte[BX], '-'
+		JE EV1_REST
+		;ADD word[aux_resul2], AX
+		JMP EV1_CONTINUA2
+		EV1_REST:
+			;SUB word[aux_resul2], AX
+			NEG AX
+		EV1_CONTINUA2:
+		ADD word[aux_resul2], AX ; SIEMPRE SUMO
+		;-----------------------
+		POP DX
+		POP CX
+		POP AX
+		POP DI
+		POP SI
+		POP BX
+		JMP AUX_L_CONT
+
+	EVALUA0:
+		PUSH BX
+		PUSH SI 
+		PUSH DI
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		;----------------------
+		CMP byte[BX], '$'
+		JE EV0_CONTINUA2
+		;----------------------
+		MOV byte[coef_num], 00h
+		MOV byte[tam], 00h
+		CL_STRING coef
+		GET_NUM BX, 00H
+		;----------------------
+		; CONVIERTO NUMERO
+		;----------------------
+		COUNT coef, [tam]
+		CMP byte[tam], 01h
+		JE E2_CONV1
+		JMP E2_CONV2
+		E2_CONV1:
+			TO_NUM1 coef, byte[coef_num]
+			JMP E2_CONTINUA
+		E2_CONV2:
+			TO_NUM2 coef, byte[coef_num]
+			JMP E2_CONTINUA
+		E2_CONTINUA:
+		;----------------------
+		XOR AX, AX
+		MOV AH, 00H
+		MOV AL, byte[coef_num]
+		CMP byte[BX], '-'
+		JE EV0_REST
+		;ADD word[aux_resul2], AX
+		JMP EV0_CONTINUA2
+		EV0_REST:
+			;SUB word[aux_resul2], AX
+			NEG AX
+		EV0_CONTINUA2:
+		ADD word[aux_resul2], AX ; SIEMPRE SUMO
+		POP DX
+		POP CX
+		POP AX
+		POP DI
+		POP SI
+		POP BX
+		JMP AUX_L_CONT
+
+	ESCRIBE_SAL:
+		PUSH BX
+		PUSH SI
+		PUSH CX
+		PUSH AX 
+		;------
+		XOR CX, CX 
+		MOV BX, pruebas
+		MOV CL, 07h
+		L_E1:
+			CMP byte[BX], '$'
+			JE F_L_E1
+			MOV AL, byte[BX]
+			DRAW_CHAR 03H, CL, AL, 07H
+			INC CL
+			INC BX
+			JMP L_E1
+		F_L_E1:
+		;------
+		POP AX 
+		POP CX
+		POP SI
+		POP BX
+		RET
 
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE RESOLVER ECUACION															 *
@@ -2133,7 +2857,6 @@ section .text
 		JE MENU_PRINCIPAL
 		JMP OP_REP_FUN
 
-
 	REP1:
 		CALL CLS
 		PRINTSTRING mes_rep
@@ -2388,6 +3111,7 @@ section .text
 			CMP CH, CL 						; EL CONTADOR YA LLEGO A N?
 			JE FIN_POW
 			MUL BX 							; MULTIPLICO AX POR DL
+			;MUL BL
 			INC CH 							; INCREMENTO CH
 			JMP POW_LOOP 					; VUELVO A COMENZAR
 		FIN_POW:
@@ -2602,6 +3326,61 @@ section .text
 			JMP LOOPAUX1
 		ENDAUX1:
 			RET
+	
+	;--------------------------------------
+	; MODO GRAFICO
+	;--------------------------------------
+	GRAPHIC_MODE:
+		MOV AH, 00H
+		MOV AL, 10H
+		INT 10H
+		RET
+
+	;--------------------------------------
+	; PAUSE EN GRAFICO
+	;--------------------------------------
+	GRAPHIC_PAUSE:
+		MOV AH, 08H
+		INT 21H
+		RET
+
+	;--------------------------------------
+	; LOOP PARA DIBUJAR UNA LINEA HORIZONTAL
+	;--------------------------------------
+	H_LINE:
+		MOV SI, 001H
+		H_LP:
+			CMP SI, word[max]
+			JE H_END
+			MOV AH, 0CH
+			MOV AL, byte[color]
+			MOV BH, 00H
+			INT 10H
+			INC CX
+			INC SI
+			JMP H_LP
+		H_END:
+			RET
+
+	;--------------------------------------
+	; LOOP PARA DIBUJAR UNA LINEA VERTICAL
+	;--------------------------------------
+	V_LINE:
+		MOV SI, 001H
+		V_LP:
+			CMP SI, word[max]
+			JE V_END
+			MOV AH, 0CH
+			MOV AL, byte[color]
+			MOV BH, 00H
+			INT 10H
+			INC DX
+			INC SI
+			JMP V_LP
+		V_END:
+			RET
+
+	;--------------------------------------
 	; SALIDA DEL PROGRAMA
 	;--------------------------------------
 	EXIT:

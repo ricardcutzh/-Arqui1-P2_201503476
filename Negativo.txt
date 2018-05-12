@@ -1,0 +1,101 @@
+%macro IMPRIMECHAR 1
+	PUSH AX
+	PUSH CX
+	PUSH BX
+
+	MOV AH, 02H		; DUNCION PARA IMPRIMIR UN CARACTER
+	MOV DL, %1 		; CARACTER DE SALIDA A IMPRIMIR
+	INT 21H 		; INTERRUPCION 21H
+
+	POP BX
+	POP CX
+	POP AX
+%endmacro
+%macro POW 3  					; P1: NUMERO A ELEVAR, P2: EXPONENTE, P3: LUGAR DONDE SE ALMACENA LA RESPUESTA (WORD)
+	PUSH AX
+	PUSH BX
+	PUSH CX
+	PUSH DX
+	;---------
+	XOR BX, BX
+	XOR AX, AX
+	XOR DX, DX
+	XOR CX, CX 
+	MOV AX, %1 					; COLOCO EL NUMERO A ELEVAR EN AX
+	MOV BX, %1
+	MOV CL, %2 					; COLOCO EL EXPONENTE EN CX
+	CALL DO_POW 				; LLAMO A QUE HAGA EL ELEVADO
+	MOV %3, AX 					; MUEVO EL RESULTADO A LA VARIABLE
+	;---------
+	POP DX
+	POP CX
+	POP BX
+	POP AX
+%endmacro
+section .data
+num1 db 00h
+num2 db 00h
+num3 db 00h
+resp dw 00h
+num  dw 00h
+section .text
+
+	global Main
+	
+	Main:
+		MOV byte[num1], -02h
+		MOV byte[num2], 02h
+		MOV byte[num3], 00H
+		
+		MOV word[num], 02H
+		MOV CL, 03H
+		
+		; - 2
+		NEG word[num]
+		; -2^3
+		POW word[num], 03h, word[resp]
+		; -8+2H = -6 
+		XOR AX, AX
+		MOV AL, 02h		
+		ADD word[resp], AX
+		XOR AX, AX
+		
+		; -9 * -1 = 9
+		;NEG word[resp]
+		
+		MOV AX, word[resp]
+		
+		; TESTEO SI ES O NO ES NEGATIVO
+		TEST AX, 0x80
+		JZ POSI
+		
+		JMP NEGA
+		
+		JMP EXIT
+	
+	
+	NEGA:
+		IMPRIMECHAR '-'
+		JMP EXIT
+		
+	POSI:
+		IMPRIMECHAR '+'
+		JMP EXIT
+	
+	DO_POW:	
+		; AQUI INICIA:
+		MOV CH, 00H 
+		SUB CL, 001h
+		POW_LOOP:
+			CMP CH, CL 						; EL CONTADOR YA LLEGO A N?
+			JE FIN_POW
+			MUL BX 							; MULTIPLICO AX POR DL
+			;MUL BL
+			INC CH 							; INCREMENTO CH
+			JMP POW_LOOP 					; VUELVO A COMENZAR
+		FIN_POW:
+			RET
+	
+	EXIT:
+		MOV AH, 04CH
+		INT 21H
