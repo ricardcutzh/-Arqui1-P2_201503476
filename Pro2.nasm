@@ -5,6 +5,7 @@ section .bss
 memhandle  resb 2
 pathHandle resb 2
 rep_e_hand resb 2
+rep_evl_handle   resb 2
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE DATA																			 *
 ;*****************************************************************************************************************************************************
@@ -559,7 +560,8 @@ mensal              db 10,"********** SALIENDO ..... **********",10,13,"$"
 correcto 			db "********* FUNCION INGRESADA Y GUARDADA CORRECTAMENTE ********$"
 memoria 			dw "mt.txt$"
 reporte_equ 		dw "re.txt$"
-
+reporte_evl 		dw "evl.txt$"
+lenght 				db 00h 
 es_imp 				db 00h
 ;--------------------------------------
 ; MENU PRINCIPAL
@@ -1760,7 +1762,7 @@ section .text
 		;*********
 		MOV byte[contador], CL
 		CMP byte[contador], 0EH
-		JG SIGUE
+		JL SIGUE
 		MOV byte[contador], 0EH
 		SIGUE:
 		POP DI
@@ -2056,11 +2058,20 @@ section .text
 			JZ RESTA
 
 			NEG word[aux_resul2]
+
+			MOV AX, word[aux_resul2]
+			XOR AH, AH
+			MOV word[aux_resul2], AX
+
 			ADD DX, word[aux_resul2]
 			
 			JMP GUARDAY1
 
 			RESTA:
+			MOV AX, word[aux_resul2]
+			XOR AH, AH
+			MOV word[aux_resul2], AX
+
 			SUB DX, word[aux_resul2]
 			
 
@@ -2248,9 +2259,16 @@ section .text
 			TO_NUM2 coef, byte[coef_num]
 			JMP CONTINUA
 		CONTINUA:
+		;**********
+		; COEG < 0
+		;**********
+		CMP byte[coef_num], 0H
+		JNE C_2
+		MOV byte[coef_num], 01h
 		;---------
 		; ELEVO
 		;---------
+		C_2:
 		MOV AL, byte[expo]
 		SUB AL, 030H
 		MOV byte[expo], AL ;<---- AQUI EL PROBLEMA
@@ -2310,9 +2328,16 @@ section .text
 			TO_NUM2 coef, byte[coef_num]
 			JMP E1_CONTINUA
 		E1_CONTINUA:
+		;**********
+		; COEG < 0
+		;**********
+		CMP byte[coef_num], 0H
+		JNE C_1
+		MOV byte[coef_num], 01h
 		;-----------------------
 		; MULTIPLICO
 		;----------------------
+		C_1:
 		XOR AX, AX
 		MOV AX, SI
 		MOV DL, byte[coef_num]
@@ -2364,7 +2389,14 @@ section .text
 			TO_NUM2 coef, byte[coef_num]
 			JMP E2_CONTINUA
 		E2_CONTINUA:
+		;**********
+		; COEG < 0
+		;**********
+		CMP byte[coef_num], 0H
+		JNE C_0
+		MOV byte[coef_num], 01h
 		;----------------------
+		C_0:
 		XOR AX, AX
 		MOV AH, 00H
 		MOV AL, byte[coef_num]
@@ -2859,9 +2891,8 @@ section .text
 
 	REP1:
 		CALL CLS
-		PRINTSTRING mes_rep
-		CALL SYSPAUSE
-		JMP OP_REP_FUN
+		CALL EVL_REP
+		
 
 	REP2:
 		CALL CLS
@@ -2904,6 +2935,192 @@ section .text
 		POP BX
 		POP CX
 		POP AX
+		RET
+
+	EVL_REP:
+		PUSH CX
+		PUSH DX
+		PUSH SI
+		PUSH DI 
+		PUSH BX
+		PUSH AX
+		CALL RP2
+		CALL LIMPIAR_FUN
+		CL_STRING contenido 									; LEO EL CONTENIDO DEL ARCHIVO
+		CALL READ_MEMORY 										; LEO LA MEMORIA DE LA CALCULADORA
+		CALL COUNT_FUN
+		MOV CL, 01H
+		LOOP_EVL:
+			CL_STRING auxiliar
+			CMP CL, byte[contador]
+			JG FIN_L_EVL
+			READ_FUN CL
+			ANALIZER auxiliar
+			;**************************
+			; CUENTO auxiliar y escribo
+			PUSH CX
+			XOR CX, CX
+			write_in_file [rep_evl_handle], 0BH, rep_eq_fun
+			COUNT auxiliar, byte[lenght]
+			write_in_file [rep_evl_handle], [lenght], auxiliar
+			MOV byte[charAux], 10
+			write_in_file [rep_evl_handle], 1h, charAux
+			POP CX
+			
+			CALL PUNTOS
+
+			write_in_file [rep_evl_handle], 3BH, separador
+			MOV byte[charAux], 10
+			write_in_file [rep_evl_handle], 1h, charAux
+			INC CL
+			JMP LOOP_EVL
+		FIN_L_EVL:
+		CALL CL_REP2
+		PUSH AX
+		PUSH BX
+		PUSH DI
+		PUSH SI
+		PUSH DX
+		PUSH CX
+		PRINTSTRING mes_rep
+		CALL SYSPAUSE
+		JMP OP_REP_FUN 	
+
+	RP2:
+		PUSH BX
+		PUSH AX
+		PUSH DX
+		PUSH CX
+		;32
+		create_file reporte_evl, [rep_evl_handle]
+		write_in_file [rep_evl_handle], 20h, encabezado_rep
+		MOV byte[charAux], 10
+		write_in_file [rep_evl_handle], 1h, charAux
+		write_in_file [rep_evl_handle], 3BH, separador
+		MOV byte[charAux], 10
+		write_in_file [rep_evl_handle], 1h, charAux
+		POP CX
+		POP DX
+		POP AX
+		POP BX
+		RET
+
+	CL_REP2:
+		PUSH BX
+		PUSH AX
+		PUSH DX
+		PUSH CX
+		close_file [rep_evl_handle]
+		POP CX
+		POP DX
+		POP AX
+		POP BX
+		RET
+
+	PUNTOS:
+		PUSH BX
+		PUSH SI 
+		PUSH DI
+		PUSH AX
+		PUSH CX
+		PUSH DX
+		;---------S		
+		CL_STRING pruebas
+		MOV SI, -06h
+		PUNTOS_LOOP:
+			CMP SI, 06h
+			JE FIN_PUNTOS
+			;***********************
+			; RESETEO RESP
+			MOV word[aux_resul2], 00h
+			MOV word[aux_resul3], 00h
+			CALL EVL_AUX
+			;***********************
+			; TOMO RESPUESTA
+			CL_STRING pruebas
+			CL_STRING charArr
+
+			
+
+			MOV byte[charAux], '*'
+			write_in_file [rep_evl_handle], 1h, charAux
+			MOV byte[charAux], ' '
+			write_in_file [rep_evl_handle], 1h, charAux
+			MOV byte[charAux], 'x'
+			write_in_file [rep_evl_handle], 1h, charAux
+			MOV byte[charAux], ':'
+			write_in_file [rep_evl_handle], 1h, charAux
+			MOV byte[charAux], ' '
+			write_in_file [rep_evl_handle], 1h, charAux
+
+			PUSH CX
+			MOV CX, SI
+			ADD CL, 030h
+
+			TEST SI, 0x80
+			JZ N_N
+
+			MOV byte[charAux], '-' 
+			write_in_file [rep_evl_handle], 1h, charAux
+
+			MOV CX, SI
+			NEG CX
+			ADD CL, 030H
+
+			N_N:
+			MOV byte[charAux], CL 
+			write_in_file [rep_evl_handle], 1h, charAux
+			POP CX
+
+			PUNTOS_CONT:
+			MOV byte[charAux], ','
+			write_in_file [rep_evl_handle], 1h, charAux
+			MOV byte[charAux], ' '
+			write_in_file [rep_evl_handle], 1h, charAux
+			MOV byte[charAux], 'y'
+			write_in_file [rep_evl_handle], 1h, charAux
+			MOV byte[charAux], ':'
+			write_in_file [rep_evl_handle], 1h, charAux
+			MOV byte[charAux], ' '
+			write_in_file [rep_evl_handle], 1h, charAux
+
+			;*****************************************************
+			; AQUI VOY A ANALIZAR SI ES NECESARIO COLOCAR EL SIGNO
+			;*****************************************************
+			MOV AX, word[aux_resul2]
+			TEST AX, 0x80
+			JZ POSITIVO
+			NOT word[aux_resul2]
+			ADD word[aux_resul2], 01h
+
+			MOV byte[charAux], '-'
+			write_in_file [rep_evl_handle], 1h, charAux
+			;*****************************************************
+
+			POSITIVO:
+			MOV AX, word[aux_resul2]
+			XOR AH, AH
+			MOV word[aux_resul2], AX
+			NUM_TO_CHAR aux_resul2, charArr 							; CONVIERTO EL NUMERO A ARREGLO
+			NUM_SALIDA charArr, pruebas
+			PUSH CX
+			COUNT pruebas, byte[lenght]
+			write_in_file [rep_evl_handle], [lenght], pruebas
+			POP CX
+			MOV byte[charAux], 10
+			write_in_file [rep_evl_handle], 1h, charAux
+
+			
+			INC SI
+			JMP PUNTOS_LOOP
+		FIN_PUNTOS:
+		;---------
+		POP DX
+		POP CX
+		POP AX
+		POP DI
+		POP SI
+		POP BX
 		RET
 
 ;*****************************************************************************************************************************************************
