@@ -367,6 +367,7 @@ section .data
 	PUSH CX
 	PUSH DX
 	PUSH SI
+	PUSH DI
 	;--------
 	XOR AX, AX 
 	XOR DX, DX
@@ -376,6 +377,7 @@ section .data
 	MOV BX, %2 								; LA DIRECCION DE LA CADENA
 	CALL DEC_TO_CHAR
 	;--------
+	POP DI
 	POP SI
 	POP DX
 	POP CX
@@ -577,6 +579,7 @@ menu 				db "*********************************************************",10,13,
 					db "*  6) RESOLVER ENCUACION                                *",10,13,
 					db "*  7) REPORTES                                          *",10,13,
 					db "*  8) SALIR                                             *",10,13,
+					db "*  9) CONFIGURACION                                     *",10,13,
 					db "*********************************************************",10,13,
 					db "* >> $"
 
@@ -745,6 +748,29 @@ pruebas times 50    db "$"
 ;---------------------------
 xcord 				dw 00H
 ycord 				dw 00H
+;---------------------------
+limite_menor 		dw -06H
+limite_superior     dw 06H
+espaciado 			db 00h
+;---------------------------
+menu_config 		db "*********************************************************",10,13,
+					db "*                 MENU CONFIGURACION                    *",10,13,
+					db "*********************************************************",10,13,
+					db "*  1) LIMITE SUPERIOR                                   *",10,13,
+					db "*  2) LIMITE INFERIOR                                   *",10,13,
+					db "*  3) ESPACIADO DE X                                    *",10,13,
+					db "*  4) VER CONFIGURACIONES                               *",10,13,
+					db "*  5) SALIR                                             *",10,13,
+					db "*********************************************************",10,13,
+					db "* >> $"
+
+conf_sup 			db " LIMITE SUPERIOR >> $"
+conf_inf 			db " LIMITE INFERIOR >> -$"
+
+guardado 			db " CONFIGURACION GUARDADA...$"
+
+ycordaux 			dw 00H
+xcordaux 			dw 00h
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE TEXT																			 *
 ;*****************************************************************************************************************************************************
@@ -761,6 +787,7 @@ section .text
 		;CALL SYSPAUSE
 		;CALL EXIT
 		CALL REP_EQ
+		CALL RESET_MEM
 		JMP MENU_PRINCIPAL
 
 	MENU_PRINCIPAL:
@@ -786,6 +813,8 @@ section .text
 		JE OP_REP_FUN 											; -- SALTA A REPORTES DE APLICACION
 		CMP AL, '8'												; SI ES LA OPCION 8
 		JE SALIR_PROGRAMA 										; ---SALE
+		CMP AL, '9'
+		JE CONFIG
 		JMP MENU_PRINCIPAL 										; CUALQUIER OTRA OPCIONE VUELVE A PEDIR LA ENTRADA
 		
 	SALIR_PROGRAMA:
@@ -813,6 +842,11 @@ section .text
 			write_in_file [memhandle], [tam], contenido
 			close_file [memhandle]
 			RET
+
+	RESET_MEM:
+		create_file memoria, [memhandle]
+		close_file [memhandle]
+		RET
 
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE DERIVAR   																	 *
@@ -1842,6 +1876,10 @@ section .text
 		CALL DIBUJA_MARCO 										; DIBUJO EL MARCO DE LA GRAFICADORA
 		CALL DIBUJA_EJES
 		;----------------
+		; PRUEBAS
+		;----------------
+		DRAW_PIX -032H, 0AH, 07H
+		;----------------
 		;CALL GRAPHIC_PAUSE 										; PAUSA PARA PODER VER QUE SE DIBUJE TODO
 		JMP MUEVE_FELCHAS
 		JMP MENU_PRINCIPAL
@@ -1904,6 +1942,7 @@ section .text
 		CALL EVALUA_FUNCION
 		CALL EVALUA_FUNCION2
 		CALL ESCRIBE_AUX
+		;CL_STRING auxiliar
 		;************************************
 		; AQUI DEBERIA DE EVALUAR LA FUNCION
 		;************************************
@@ -1919,12 +1958,11 @@ section .text
 		; AQUI DEBERIA DE PINTAR
 		;************************
 		CALL REPAINT
-		PUSH AX
-		XOR AX, AX
-		MOV AL, CL
-		ADD AL, 30H
-		DRAW_CHAR 01H, 08H, AL, 07H
-		POP AX
+		READ_FUN CL
+		ANALIZER auxiliar
+		CALL EVALUA_FUNCION
+		CALL EVALUA_FUNCION2
+		;CL_STRING auxiliar
 		;************************	
 		JMP LOOP_FLE
 
@@ -2021,8 +2059,10 @@ section .text
 		;---------S		
 		CL_STRING pruebas
 		MOV SI, 00h
+
 		EVL_LOOP:
-			CMP SI, 06H
+			;CMP SI, 06H
+			CMP SI, word[limite_superior]
 			JE FIN_EVL
 			;***********************
 			; RESETEO RESP
@@ -2051,7 +2091,7 @@ section .text
 			MOV word[xcord], AX
 			XOR AX, AX
 			;--------------
-			MOV DX, 0AFH
+			MOV DX, 0AFH ; CENTRO DE Y
 
 			MOV AX, word[aux_resul2]
 			TEST AX, 0x80
@@ -2068,6 +2108,7 @@ section .text
 			JMP GUARDAY1
 
 			RESTA:
+
 			MOV AX, word[aux_resul2]
 			XOR AH, AH
 			MOV word[aux_resul2], AX
@@ -2079,11 +2120,31 @@ section .text
 			MOV word[ycord], DX
 
 
-			MOV AX, 140H
+			MOV AX, 140H ; CENTRO DE X
 			ADD AX, word[xcord]
 			MOV word[xcord], AX
 			CALL ESCRIBE_SAL
-			;-------------
+			;-------------------------------
+			; PRUEBA
+			;-------------------------------
+			MOV AX, word[ycord]
+			MOV DX, word[xcord]
+			MOV word[ycordaux], AX
+			MOV word[xcordaux], DX
+
+			ADD word[ycordaux], 01H
+			DRAW_PIX word[ycordaux], word[xcord], 07h
+
+			SUB word[ycordaux], 02h
+			DRAW_PIX word[ycordaux], word[xcord], 07h
+
+			ADD word[xcordaux], 01h
+			DRAW_PIX word[ycord], word[xcordaux], 07h
+
+			SUB word[xcordaux], 02h
+			DRAW_PIX word[ycord], word[xcordaux], 07h
+			
+			;-------------------------------
 			DRAW_PIX word[ycord], word[xcord], 07h
 
 			;----------------------
@@ -2112,7 +2173,8 @@ section .text
 		CL_STRING pruebas
 		MOV SI, -1h
 		EVL_LOOP2:
-			CMP SI, -06H
+			;CMP SI, -06H
+			CMP SI, word[limite_menor]
 			JE FIN_EVL2
 			;***********************
 			; RESETEO RESP
@@ -2143,7 +2205,7 @@ section .text
 			MOV word[xcord], AX
 			XOR AX, AX
 			;--------------
-			MOV DX, 0ABH
+			MOV DX, 0ABH ; CENTRO DE Y 
 
 			MOV AX, word[aux_resul2]
 			TEST AX, 0x80
@@ -2152,6 +2214,8 @@ section .text
 
 			; si el numero es negativo
 			NEG word[aux_resul2]
+
+			
 
 			MOV AX, word[aux_resul2]
 			XOR AH, AH
@@ -2162,6 +2226,8 @@ section .text
 			JMP GUARDAY2
 
 			REST2:
+			
+
 			; si el numero es positivo
 			MOV AX, word[aux_resul2]
 			XOR AH, AH
@@ -2173,19 +2239,34 @@ section .text
 			MOV word[ycord], DX
 
 
-			MOV AX, 140H
+			MOV AX, 140H ; CENTRO DE X
 			ADD AX, word[xcord]
 			MOV word[xcord], AX
 
 			;CALL ESCRIBE_SAL
+			;-----------------------------------------
+			MOV AX, word[ycord]
+			MOV DX, word[xcord]
+			MOV word[ycordaux], AX
+			MOV word[xcordaux], DX
+
+			ADD word[ycordaux], 01H
+			DRAW_PIX word[ycordaux], word[xcord], 07h
+
+			SUB word[ycordaux], 02h
+			DRAW_PIX word[ycordaux], word[xcord], 07h
+
+			ADD word[xcordaux], 01h
+			DRAW_PIX word[ycord], word[xcordaux], 07h
+
+			SUB word[xcordaux], 02h
+			DRAW_PIX word[ycord], word[xcordaux], 07h
+			;-------------------------------------------
 
 			DRAW_PIX word[ycord], word[xcord], 07h
-
-
-
-			
-			IMPRIMECHAR 10
 			;-----------------------
+
+			PR2:
 			DEC SI
 			JMP EVL_LOOP2
 		FIN_EVL2:
@@ -2232,6 +2313,7 @@ section .text
 		PUSH CX
 		PUSH DX
 		;---------
+		XOR AX, AX
 		MOV word[aux_resul3], 00h
 		CMP byte[BX], '$'
 		JE CONTINUA2
@@ -2273,10 +2355,10 @@ section .text
 		SUB AL, 030H
 		MOV byte[expo], AL ;<---- AQUI EL PROBLEMA
 		POW SI, byte[expo], word[aux_resul3]
-		
-		
+		;-----------------------
 		; MULTIPLICO
 		;-----------------------
+		MUL2:
 		XOR AX, AX 
 		MOV AX, word[aux_resul3]
 		MOV DL, byte[coef_num]
@@ -2288,6 +2370,7 @@ section .text
 		;-----------------------
 		EV2_REST:
 			;SUB word[aux_resul2], AX
+			;BORRE ESTA LINEA
 			NEG AX ; * *-1
 		CONTINUA2:
 		ADD word[aux_resul2], AX  ; SIEMPRE SUMO
@@ -2348,6 +2431,7 @@ section .text
 		JMP EV1_CONTINUA2
 		EV1_REST:
 			;SUB word[aux_resul2], AX
+			; BORRE ESTA LINEA
 			NEG AX
 		EV1_CONTINUA2:
 		ADD word[aux_resul2], AX ; SIEMPRE SUMO
@@ -2406,6 +2490,7 @@ section .text
 		JMP EV0_CONTINUA2
 		EV0_REST:
 			;SUB word[aux_resul2], AX
+			; BORRE ESTA LINEA
 			NEG AX
 		EV0_CONTINUA2:
 		ADD word[aux_resul2], AX ; SIEMPRE SUMO
@@ -2441,6 +2526,84 @@ section .text
 		POP SI
 		POP BX
 		RET
+
+;*****************************************************************************************************************************************************
+;*															SECCION DE CONFIGURACION DE GRAFICA														 *
+;*****************************************************************************************************************************************************
+	CONFIG:
+		CALL CLS
+		PRINTSTRING menu_config
+		CALL GETCHAR
+		CMP AL, '1'
+		JE LIM_SUP
+		CMP AL, '2'
+		JE LIM_INF
+		CMP AL, '3'
+		JE ESPACIADO_G
+		CMP AL, '4'
+		JE VER_CONF 
+		CMP AL, '5'
+		JE MENU_PRINCIPAL
+		JMP CONFIG
+
+	LIM_SUP:
+		CALL CLS
+		PRINTSTRING conf_sup
+		CALL GETCHAR
+		IMPRIMECHAR 10
+		XOR CX, CX
+		XOR CH, CH
+		MOV CL, AL
+		SUB CL, 30H
+		MOV word[limite_superior], CX
+		XOR CX, CX
+		PRINTSTRING guardado
+		CALL SYSPAUSE
+		JMP CONFIG
+
+	LIM_INF:
+		CALL CLS
+		PRINTSTRING conf_inf
+		CALL GETCHAR
+		IMPRIMECHAR 10
+		XOR CX, CX
+		XOR CH, CH
+		MOV CL, AL
+		SUB CL, 030H
+		NEG CX
+		MOV word[limite_menor], CX
+		XOR CX, CX
+		PRINTSTRING guardado
+		CALL SYSPAUSE
+		JMP CONFIG
+
+	ESPACIADO_G:
+		JMP CONFIG
+
+	VER_CONF:
+		CALL CLS
+		XOR CX, CX
+		XOR AX, AX
+		MOV CX, word[limite_superior]
+		;---SUP---
+		XOR CH,CH
+		ADD CL, 030H
+		PRINTSTRING conf_sup
+		IMPRIMECHAR CL
+		;---------
+		IMPRIMECHAR 10
+		MOV AX, word[limite_menor]
+		;---------
+		XOR AH, AH 
+		NEG AL
+		ADD AL, 030H
+		PRINTSTRING conf_inf
+		IMPRIMECHAR AL
+		IMPRIMECHAR 10
+		XOR CX, CX
+		XOR AX, AX
+		CALL SYSPAUSE
+		JMP CONFIG
 
 ;*****************************************************************************************************************************************************
 ;*															SECCION DE RESOLVER ECUACION															 *
@@ -2891,8 +3054,7 @@ section .text
 
 	REP1:
 		CALL CLS
-		CALL EVL_REP
-		
+		CALL EVL_REP		
 
 	REP2:
 		CALL CLS
@@ -3026,10 +3188,12 @@ section .text
 		PUSH DX
 		;---------S		
 		CL_STRING pruebas
-		MOV SI, -06h
+		;MOV SI, -06h
+		MOV SI, 001h
 		PUNTOS_LOOP:
 			CMP SI, 06h
-			JE FIN_PUNTOS
+			;CMP SI, word[limite_superior]
+			JG FIN_PUNTOS
 			;***********************
 			; RESETEO RESP
 			MOV word[aux_resul2], 00h
@@ -3039,8 +3203,6 @@ section .text
 			; TOMO RESPUESTA
 			CL_STRING pruebas
 			CL_STRING charArr
-
-			
 
 			MOV byte[charAux], '*'
 			write_in_file [rep_evl_handle], 1h, charAux
@@ -3057,6 +3219,7 @@ section .text
 			MOV CX, SI
 			ADD CL, 030h
 
+			;TEST SI, 0x80
 			TEST SI, 0x80
 			JZ N_N
 
@@ -3088,18 +3251,17 @@ section .text
 			; AQUI VOY A ANALIZAR SI ES NECESARIO COLOCAR EL SIGNO
 			;*****************************************************
 			MOV AX, word[aux_resul2]
-			TEST AX, 0x80
+			TEST AX, 0x8000
 			JZ POSITIVO
-			NOT word[aux_resul2]
-			ADD word[aux_resul2], 01h
-
+			NEG word[aux_resul2]
 			MOV byte[charAux], '-'
 			write_in_file [rep_evl_handle], 1h, charAux
 			;*****************************************************
 
 			POSITIVO:
+			XOR AX, AX
 			MOV AX, word[aux_resul2]
-			XOR AH, AH
+			;XOR AH, AH
 			MOV word[aux_resul2], AX
 			NUM_TO_CHAR aux_resul2, charArr 							; CONVIERTO EL NUMERO A ARREGLO
 			NUM_SALIDA charArr, pruebas
@@ -3110,7 +3272,7 @@ section .text
 			MOV byte[charAux], 10
 			write_in_file [rep_evl_handle], 1h, charAux
 
-			
+			P_TERMINA:
 			INC SI
 			JMP PUNTOS_LOOP
 		FIN_PUNTOS:
